@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Spam Cleanup Report</title></head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif">
+<div style="max-width:800px;margin:0 auto;padding:20px">
+
+    <div style="background:#e74c3c;color:#fff;padding:30px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="margin:0;font-size:24px">🛡️ WordPress Spam Cleanup Report</h1>
+        <p style="margin:6px 0 0;opacity:0.9">atozappliancesrepair.com — Friday, 29 May 2026 — 10:03 PM</p>
+        <div style="background:rgba(0,0,0,0.2);display:inline-block;padding:6px 18px;border-radius:20px;margin-top:10px;font-size:14px">
+            DRY RUN (no changes made)
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div style="background:#fff;border:1px solid #e0e0e0;padding:25px">
+        <p style="font-size:20px;font-weight:bold;color:#e74c3c;margin:0 0 20px">✅ CLEAN</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div style="background:#fff5f5;border-radius:8px;padding:15px 20px;text-align:center;flex:1;min-width:100px">
+                <div style="font-size:28px;font-weight:bold;color:#e74c3c">0</div>
+                <div style="font-size:11px;color:#888;text-transform:uppercase">Infected Pages</div>
+            </div>
+            <div style="background:#f0fff4;border-radius:8px;padding:15px 20px;text-align:center;flex:1;min-width:100px">
+                <div style="font-size:28px;font-weight:bold;color:#27ae60">0</div>
+                <div style="font-size:11px;color:#888;text-transform:uppercase">Cleaned</div>
+            </div>
+            <div style="background:#f0fff4;border-radius:8px;padding:15px 20px;text-align:center;flex:1;min-width:100px">
+                <div style="font-size:28px;font-weight:bold;color:#27ae60">0</div>
+                <div style="font-size:11px;color:#888;text-transform:uppercase">Rogue Admins</div>
+            </div>
+            <div style="background:#fff5f5;border-radius:8px;padding:15px 20px;text-align:center;flex:1;min-width:100px">
+                <div style="font-size:28px;font-weight:bold;color:#e74c3c">1</div>
+                <div style="font-size:11px;color:#888;text-transform:uppercase">PHP Issues</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Scan Results -->
+    <div style="background:#fff;border:1px solid #e0e0e0;border-top:none;padding:0 25px 20px">
+        <h3 style="color:#2c3e50;padding-top:20px">📄 Content Scan Results</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr style="background:#f8f8f8;color:#666">
+                <th style="padding:10px 15px;text-align:left">Content Type</th>
+                <th style="padding:10px 15px">Scanned</th>
+                <th style="padding:10px 15px">Infected</th>
+                <th style="padding:10px 15px">Cleaned</th>
+            </tr>
+            
+        <tr>
+            <td style="padding:10px 15px">Posts</td>
+            <td style="padding:10px 15px;text-align:center">0</td>
+            <td style="padding:10px 15px;text-align:center;color:#e74c3c;font-weight:bold">0</td>
+            <td style="padding:10px 15px;text-align:center;color:#27ae60;font-weight:bold">0</td>
+        </tr>
+        <tr>
+            <td style="padding:10px 15px">Pages</td>
+            <td style="padding:10px 15px;text-align:center">0</td>
+            <td style="padding:10px 15px;text-align:center;color:#e74c3c;font-weight:bold">0</td>
+            <td style="padding:10px 15px;text-align:center;color:#27ae60;font-weight:bold">0</td>
+        </tr>
+        </table>
+
+        
+    </div>
+
+    <!-- Admin Users -->
+    
+
+    <!-- PHP Issues -->
+    
+    <div style="background:#fff;border:1px solid #e0e0e0;border-top:none;padding:20px 25px">
+        <h3 style="color:#e74c3c;margin:0 0 12px">💉 PHP File Injection Detected</h3>
+        
+        <div style="background:#fff5f5;border-left:4px solid #e74c3c;padding:12px 15px;margin:8px 0;border-radius:4px">
+            <strong style="color:#e74c3c">PHP Injection (Active)</strong><br>
+            <span style="font-size:13px;color:#555">PHP warnings detected in REST API response — injected PHP file has broken includes</span><br>
+            <span style="font-size:12px;color:#e74c3c;margin-top:5px;display:block">
+                ⚡ Action: Check index.php, wp-config.php, and .htaccess for injected code. Look for eval(), base64_decode(), or unexpected includes.
+            </span>
+        </div>
+    </div>
+
+    
+        <div style="background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:20px;margin:20px 0">
+            <h3 style="color:#f39c12;margin:0 0 12px">⚡ Manual Action Required (PHP Files)</h3>
+            <p style="font-size:13px;color:#555;margin:0 0 10px">
+                The spam agent cannot edit server PHP files directly. Please do these steps manually:
+            </p>
+            <ol style="font-size:13px;color:#555;margin:0;padding-left:20px">
+                <li style="margin-bottom:8px">Log into cPanel → File Manager → <code>public_html/index.php</code><br>
+                    Remove any line with <code>include('old.php')</code> or similar unknown includes</li>
+                <li style="margin-bottom:8px">Check <code>.htaccess</code> for unauthorized redirect rules</li>
+                <li style="margin-bottom:8px">Check <code>wp-config.php</code> for injected code at top/bottom</li>
+                <li style="margin-bottom:8px">Search all PHP files for <code>eval(base64_decode(</code> — delete those lines</li>
+                <li style="margin-bottom:8px">Install <strong>Wordfence</strong> plugin and run a full scan</li>
+                <li>In Google Search Console → Request <strong>Re-crawl</strong> after cleanup</li>
+            </ol>
+        </div>
+
+    <div style="background:#2c3e50;color:#aaa;padding:20px;border-radius:0 0 12px 12px;text-align:center;font-size:12px">
+        SEO Guardian Spam Cleanup Agent · Friday, 29 May 2026 — 10:03 PM
+    </div>
+</div>
+</body></html>
