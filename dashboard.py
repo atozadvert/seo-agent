@@ -27,7 +27,7 @@ except ImportError:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-DB_PATH = "seo_guardian.db"
+DB_PATH = os.getenv("DB_PATH", "seo_guardian.db")
 
 st.set_page_config(
     page_title="SEO Guardian Dashboard",

@@ -32,7 +32,7 @@ CONFIG = {
     "email_password": os.getenv("EMAIL_PASSWORD", ""),
     "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port": 587,
-    "db_path": "seo_guardian.db",
+    "db_path": os.getenv("DB_PATH", "seo_guardian.db"),
 }
 
 

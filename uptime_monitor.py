@@ -42,7 +42,7 @@ CONFIG = {
     "smtp_server":    os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
-    "db_path":        "seo_guardian.db",
+    "db_path":        os.getenv("DB_PATH", "seo_guardian.db"),
     "token_file":     "token.pickle",
     "timeout":        10,    # seconds before marking as down
     "slow_threshold": 3.0,   # seconds — warn if response takes longer
