@@ -6,8 +6,6 @@ Run daily via Task Scheduler (added automatically by setup).
 """
 
 import os
-import json
-import base64
 import pickle
 import sqlite3
 import smtplib
@@ -17,7 +15,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from google.oauth2 import service_account
 
 # ── Load .env ────────────────────────────────────────────────────────────────
 try:
@@ -42,7 +39,7 @@ CONFIG = {
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
     "token_file":     "token.pickle",
-    "db_path":        os.getenv("DB_PATH", "seo_guardian.db"),
+    "db_path":        "seo_guardian.db",
     "drop_alert_threshold": 5,      # alert if position drops by this many spots
     "opportunity_min_impressions": 50,  # min impressions to be an opportunity
     "opportunity_pos_min": 4,       # positions 4-20 are "quick win" opportunities
@@ -129,20 +126,9 @@ def init_db(db_path: str) -> sqlite3.Connection:
 
 # ── Google Auth ───────────────────────────────────────────────────────────────
 def get_gsc_service():
-    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
-    if service_account_b64:
-        service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
-        creds = service_account.Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
-        )
-        return build("webmasters", "v3", credentials=creds)
-
     token_file = CONFIG["token_file"]
     if not Path(token_file).exists():
-        raise FileNotFoundError(
-            "No GSC credentials found. Set GSC_SERVICE_ACCOUNT_JSON or run setup_google_auth.py first."
-        )
+        raise FileNotFoundError(f"token.pickle not found. Run setup_google_auth.py first.")
     with open(token_file, "rb") as f:
         creds = pickle.load(f)
     if creds.expired and creds.refresh_token:
@@ -547,10 +533,10 @@ def run():
                 f":chart_with_upwards_trend: {gains_n} gains  "
                 f":bulb: {opps_n} opps"
             )
-        rank_icon = '\U0001f4c9' if total_drops else '\u2705'
-        blocks = [
+            icon_rank = '\U0001f4c9' if total_drops else '\u2705'
+            blocks = [
             {"type":"header","text":{"type":"plain_text",
-                "text":f"{rank_icon} Rank Tracker — {today}"}},
+                    "text":f"{icon_rank} Rank Tracker — {today}"}},
             {"type":"section","fields":[
                 {"type":"mrkdwn","text":f"*Sites:*\n{len(site_reports)}"},
                 {"type":"mrkdwn","text":f"*Rank Drops:*\n{'`'+str(total_drops)+'` :rotating_light:' if total_drops else '`0` :white_check_mark:'}"},
@@ -578,5 +564,3 @@ def run():
 
 if __name__ == "__main__":
     run()
- 
- 
