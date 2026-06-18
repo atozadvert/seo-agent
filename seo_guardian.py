@@ -452,7 +452,24 @@ def build_email_html(reports, run_date):
             {legit_section}
         </div>"""
 
-    # â”€â”€ Assemble full email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        actions_block = ""
+        if total_sus > 0:
+                actions_block = """
+        <div style='background:#fff8f0;border:1px solid #ffd0a0;border-radius:8px;
+                                padding:16px 18px;margin-top:20px;'>
+            <h3 style='margin:0 0 10px;color:#e67e22;font-size:14px;'>
+                    ðŸ”§ Recommended Actions
+            </h3>
+            <ol style='margin:0;padding-left:18px;font-size:13px;color:#444;line-height:1.8;'>
+                <li>Log in to your website hosting panel and run a <b>malware scan</b></li>
+                <li>Go to Google Search Console â†’ <b>Security &amp; Manual Actions</b> for each flagged site</li>
+                <li>Search Google for: <code style='background:#f4f4f4;padding:2px 5px;border-radius:3px;'>site:yourdomain.com slot</code> to find injected pages</li>
+                <li>Contact your hosting provider to <b>restore a clean backup</b></li>
+                <li>After cleanup, request a <b>Google Review</b> in Search Console</li>
+            </ol>
+        </div>"""
+
+        # â”€â”€ Assemble full email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -498,21 +515,8 @@ def build_email_html(reports, run_date):
                text-transform:uppercase;letter-spacing:1px;">Site-by-Site Report</h2>
     {site_blocks}
 
-    <!-- WHAT TO DO SECTION -->
-    {"" if total_sus == 0 else """
-    <div style='background:#fff8f0;border:1px solid #ffd0a0;border-radius:8px;
-                padding:16px 18px;margin-top:20px;'>
-      <h3 style='margin:0 0 10px;color:#e67e22;font-size:14px;'>
-          ðŸ”§ Recommended Actions
-      </h3>
-      <ol style='margin:0;padding-left:18px;font-size:13px;color:#444;line-height:1.8;'>
-        <li>Log in to your website hosting panel and run a <b>malware scan</b></li>
-        <li>Go to Google Search Console â†’ <b>Security &amp; Manual Actions</b> for each flagged site</li>
-        <li>Search Google for: <code style='background:#f4f4f4;padding:2px 5px;border-radius:3px;'>site:yourdomain.com slot</code> to find injected pages</li>
-        <li>Contact your hosting provider to <b>restore a clean backup</b></li>
-        <li>After cleanup, request a <b>Google Review</b> in Search Console</li>
-      </ol>
-    </div>"""}
+        <!-- WHAT TO DO SECTION -->
+        {actions_block}
 
     <!-- FOOTER -->
     <div style="margin-top:28px;padding-top:16px;border-top:1px solid #ecf0f1;
