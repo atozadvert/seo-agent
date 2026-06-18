@@ -530,32 +530,32 @@ elif page == "📋 All Sites":
 
     st.markdown("---")
 
-    # ── Sites List ────────────────────────────────────────────────
-    sites_info = [
-        {"Site": "atozappliancesrepair.com",          "Category": "Appliance Repair", "Location": "Dubai"},
-        {"Site": "atozadvert.com",                     "Category": "Digital Marketing","Location": "Dubai"},
-        {"Site": "silverservicesae.com",               "Category": "Cleaning Services","Location": "UAE"},
-        {"Site": "silverpainters.com",                 "Category": "Painting Services","Location": "Dubai"},
-        {"Site": "ppcexpertsdubai.com",                "Category": "PPC / Google Ads", "Location": "Dubai"},
-        {"Site": "atiflawfirm.com",                    "Category": "Legal Services",   "Location": "Dubai"},
-        {"Site": "nacl.pk",                            "Category": "Chemical Supply",  "Location": "Pakistan"},
-        {"Site": "www.premadedropshippingstores.com",  "Category": "E-Commerce",       "Location": "Global"},
-        {"Site": "pre-made-shopify-store.blogspot.com","Category": "Blog",             "Location": "Global"},
-    ]
-    
-    # Add sites from managed_sites table if it exists
+    # ── Sites List (auto-synced from managed_sites / GSC) ────────────────────
+    sites_info = []
+
     if table_exists(conn, "managed_sites"):
-        managed_df = q(conn, "SELECT domain, category, location FROM managed_sites WHERE is_active=1")
+        managed_df = q(conn, "SELECT domain, category, location FROM managed_sites WHERE is_active=1 ORDER BY domain")
         if not managed_df.empty:
             for _, row in managed_df.iterrows():
-                if not any(s["Site"] == row["domain"] for s in sites_info):
-                    sites_info.append({
-                        "Site": row["domain"],
-                        "Category": row["category"],
-                        "Location": row["location"]
-                    })
-    
-    df_sites = pd.DataFrame(sites_info)
+                sites_info.append({
+                    "Site": row["domain"],
+                    "Category": row["category"] or "Uncategorized",
+                    "Location": row["location"] or "Unknown"
+                })
+
+    if not sites_info and table_exists(conn, "uptime_status"):
+        up_seed = q(conn, "SELECT DISTINCT site FROM uptime_status")
+        if not up_seed.empty:
+            for s in up_seed["site"].tolist():
+                clean = s.replace("https://", "").replace("http://", "").rstrip("/")
+                sites_info.append({"Site": clean, "Category": "Uncategorized", "Location": "Unknown"})
+
+    if not sites_info:
+        st.info("No managed sites found yet. Run `python seo_guardian.py` after granting GSC owner access to the service account.")
+        st.code("python seo_guardian.py")
+        df_sites = pd.DataFrame(columns=["Site", "Category", "Location", "Uptime"])
+    else:
+        df_sites = pd.DataFrame(sites_info)
 
     # Merge uptime status if available
     if table_exists(conn, "uptime_status"):

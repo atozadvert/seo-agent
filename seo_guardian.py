@@ -86,8 +86,45 @@ def init_db():
         category TEXT, clicks INTEGER, impressions INTEGER,
         position REAL, date TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS managed_sites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT UNIQUE NOT NULL,
+        category TEXT,
+        location TEXT,
+        gsc_url TEXT,
+        source TEXT DEFAULT 'gsc_auto',
+        added_date DATE DEFAULT CURRENT_DATE,
+        is_active INTEGER DEFAULT 1)''')
     conn.commit()
     return conn
+
+
+def site_domain(site_url: str) -> str:
+    if site_url.startswith("sc-domain:"):
+        return site_url.replace("sc-domain:", "").strip().lower()
+    return site_url.replace("https://", "").replace("http://", "").rstrip("/").lower()
+
+
+def sync_managed_sites_from_gsc(db, sites: list[str]) -> int:
+    synced = 0
+    for site_url in sites:
+        domain = site_domain(site_url)
+        if not domain:
+            continue
+        db.execute('''INSERT OR REPLACE INTO managed_sites
+            (domain, category, location, gsc_url, source, added_date, is_active)
+            VALUES (
+                ?,
+                COALESCE((SELECT category FROM managed_sites WHERE domain=?), 'Uncategorized'),
+                COALESCE((SELECT location FROM managed_sites WHERE domain=?), 'Unknown'),
+                ?,
+                'gsc_auto',
+                date('now'),
+                1
+            )''', (domain, domain, domain, site_url))
+        synced += 1
+    db.commit()
+    return synced
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  GOOGLE AUTH
@@ -563,6 +600,8 @@ def run():
     db    = init_db()
     sites = get_all_sites(service)
     print(f"\nâœ… Found {len(sites)} verified sites. Scanning...\n")
+    synced = sync_managed_sites_from_gsc(db, sites)
+    print(f"   âœ… Synced {synced} site(s) to managed_sites")
 
     reports = []
     for site_url in sites:
