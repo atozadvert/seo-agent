@@ -547,9 +547,10 @@ def run():
                 f":chart_with_upwards_trend: {gains_n} gains  "
                 f":bulb: {opps_n} opps"
             )
+        rank_icon = '\U0001f4c9' if total_drops else '\u2705'
         blocks = [
             {"type":"header","text":{"type":"plain_text",
-                "text":f"{'\U0001f4c9' if total_drops else '\u2705'} Rank Tracker — {today}"}},
+                "text":f"{rank_icon} Rank Tracker — {today}"}},
             {"type":"section","fields":[
                 {"type":"mrkdwn","text":f"*Sites:*\n{len(site_reports)}"},
                 {"type":"mrkdwn","text":f"*Rank Drops:*\n{'`'+str(total_drops)+'` :rotating_light:' if total_drops else '`0` :white_check_mark:'}"},
