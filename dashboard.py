@@ -62,10 +62,13 @@ st.markdown("""
 # ── DB helpers ────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_conn():
-    if not Path(DB_PATH).exists():
-        st.error(f"Database not found: {DB_PATH}. Run seo_guardian.py first.")
-        st.stop()
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+    db_exists = Path(DB_PATH).exists()
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    if not db_exists:
+        st.warning(
+            f"Database initialized at {DB_PATH}. No scan data yet - run seo_guardian.py to populate reports."
+        )
+    return conn
 
 
 def table_exists(conn, name):
