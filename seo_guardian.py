@@ -17,6 +17,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
+import base64
 
 # Load .env file if present
 try:
@@ -91,8 +93,21 @@ def init_db():
 #  GOOGLE AUTH
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def get_gsc_service():
+    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_b64:
+        try:
+            service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+            )
+            return build('webmasters', 'v3', credentials=creds)
+        except Exception as exc:
+            print(f"âŒ Invalid GSC_SERVICE_ACCOUNT_JSON: {exc}")
+            return None
+
     if not Path(CONFIG["token_file"]).exists():
-        print("âŒ No token.pickle. Run: python setup_google_auth.py")
+        print("âŒ No GSC credentials found. Set GSC_SERVICE_ACCOUNT_JSON or run: python setup_google_auth.py")
         return None
     with open(CONFIG["token_file"], 'rb') as f:
         creds = pickle.load(f)
@@ -101,7 +116,7 @@ def get_gsc_service():
         with open(CONFIG["token_file"], 'wb') as f:
             pickle.dump(creds, f)
     if not creds or not creds.valid:
-        print("âŒ Credentials invalid. Run: python setup_google_auth.py")
+        print("âŒ Credentials invalid. Set GSC_SERVICE_ACCOUNT_JSON or run: python setup_google_auth.py")
         return None
     return build('webmasters', 'v3', credentials=creds)
 
@@ -580,5 +595,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-
-

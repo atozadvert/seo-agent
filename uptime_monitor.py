@@ -6,6 +6,8 @@ Schedule via Task Scheduler to run every 5 minutes.
 """
 
 import os
+import json
+import base64
 import sqlite3
 import smtplib
 import pickle
@@ -14,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -47,6 +50,28 @@ CONFIG = {
 
 def get_sites_from_gsc() -> list:
     """Fetch all verified site URLs from Google Search Console."""
+    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_b64:
+        try:
+            service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+            )
+            service = build("webmasters", "v3", credentials=creds)
+            entries = service.sites().list().execute().get("siteEntry", [])
+            sites = []
+            for e in entries:
+                url = e["siteUrl"]
+                if url.startswith("sc-domain:"):
+                    url = "https://" + url.replace("sc-domain:", "")
+                if url.startswith("http"):
+                    sites.append(url.rstrip("/"))
+            print(f"  ✅ Auto-detected {len(sites)} sites from GSC service account")
+            return sites
+        except Exception as ex:
+            print(f"  ⚠️  Service-account GSC auto-detect failed ({ex}) — trying token.pickle")
+
     token_path = Path(CONFIG["token_file"])
     if not token_path.exists():
         print("  ⚠️  token.pickle not found — using fallback site list")

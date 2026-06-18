@@ -6,6 +6,8 @@ Run daily via Task Scheduler (added automatically by setup).
 """
 
 import os
+import json
+import base64
 import pickle
 import sqlite3
 import smtplib
@@ -15,6 +17,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
 # ── Load .env ────────────────────────────────────────────────────────────────
 try:
@@ -126,9 +129,20 @@ def init_db(db_path: str) -> sqlite3.Connection:
 
 # ── Google Auth ───────────────────────────────────────────────────────────────
 def get_gsc_service():
+    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_b64:
+        service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+        )
+        return build("webmasters", "v3", credentials=creds)
+
     token_file = CONFIG["token_file"]
     if not Path(token_file).exists():
-        raise FileNotFoundError(f"token.pickle not found. Run setup_google_auth.py first.")
+        raise FileNotFoundError(
+            "No GSC credentials found. Set GSC_SERVICE_ACCOUNT_JSON or run setup_google_auth.py first."
+        )
     with open(token_file, "rb") as f:
         creds = pickle.load(f)
     if creds.expired and creds.refresh_token:

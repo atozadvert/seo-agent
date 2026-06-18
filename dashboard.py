@@ -448,6 +448,86 @@ elif page == "🔬 Advanced Monitor":
 elif page == "📋 All Sites":
     st.title("📋 All Sites Overview")
 
+    # ── Add New Site Form ─────────────────────────────────────────
+    with st.expander("➕ Add New Site to Monitoring", expanded=False):
+        st.markdown("Add a new website to SEO Guardian monitoring system.")
+        
+        with st.form("add_site_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                new_domain = st.text_input("Domain (e.g., example.com)", placeholder="example.com")
+                new_category = st.selectbox("Category", [
+                    "Digital Marketing", "E-Commerce", "Legal", "Cleaning", 
+                    "Painting", "Appliance Repair", "PPC / Google Ads",
+                    "Chemical Supply", "Blog", "Other"
+                ])
+            
+            with col2:
+                new_location = st.selectbox("Location", ["Dubai", "UAE", "Pakistan", "Global", "Other"])
+                gsc_url = st.text_input("Google Search Console URL", 
+                                       placeholder="https://example.com or sc-domain:example.com",
+                                       help="The exact URL as it appears in Google Search Console")
+            
+            keywords_raw = st.text_area("Target Keywords (one per line)", 
+                                       placeholder="keyword 1\nkeyword 2\nkeyword 3",
+                                       height=100)
+            
+            submitted = st.form_submit_button("✅ Add Site", use_container_width=True)
+            
+            if submitted:
+                if not new_domain:
+                    st.error("❌ Please enter a domain name")
+                else:
+                    try:
+                        # Create managed_sites table if it doesn't exist
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS managed_sites (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                domain TEXT UNIQUE NOT NULL,
+                                category TEXT,
+                                location TEXT,
+                                gsc_url TEXT,
+                                added_date DATE DEFAULT CURRENT_DATE,
+                                is_active INTEGER DEFAULT 1
+                            )
+                        """)
+                        
+                        # Create site_keywords table if it doesn't exist
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS site_keywords (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                site TEXT NOT NULL,
+                                keyword TEXT NOT NULL,
+                                added_date DATE DEFAULT CURRENT_DATE,
+                                UNIQUE(site, keyword)
+                            )
+                        """)
+                        
+                        # Insert site
+                        conn.execute("""
+                            INSERT OR REPLACE INTO managed_sites (domain, category, location, gsc_url, added_date)
+                            VALUES (?, ?, ?, ?, date('now'))
+                        """, (new_domain, new_category, new_location, gsc_url or f"https://{new_domain}"))
+                        
+                        # Insert keywords
+                        keywords = [k.strip() for k in keywords_raw.splitlines() if k.strip()]
+                        for kw in keywords:
+                            conn.execute("""
+                                INSERT OR IGNORE INTO site_keywords (site, keyword, added_date)
+                                VALUES (?, ?, date('now'))
+                            """, (new_domain, kw))
+                        
+                        conn.commit()
+                        st.success(f"✅ {new_domain} added successfully! Added {len(keywords)} keywords.")
+                        st.info("💡 The site will be included in the next automated scan. You can also verify it in Google Search Console.")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error adding site: {e}")
+
+    st.markdown("---")
+
+    # ── Sites List ────────────────────────────────────────────────
     sites_info = [
         {"Site": "atozappliancesrepair.com",          "Category": "Appliance Repair", "Location": "Dubai"},
         {"Site": "atozadvert.com",                     "Category": "Digital Marketing","Location": "Dubai"},
@@ -459,6 +539,19 @@ elif page == "📋 All Sites":
         {"Site": "www.premadedropshippingstores.com",  "Category": "E-Commerce",       "Location": "Global"},
         {"Site": "pre-made-shopify-store.blogspot.com","Category": "Blog",             "Location": "Global"},
     ]
+    
+    # Add sites from managed_sites table if it exists
+    if table_exists(conn, "managed_sites"):
+        managed_df = q(conn, "SELECT domain, category, location FROM managed_sites WHERE is_active=1")
+        if not managed_df.empty:
+            for _, row in managed_df.iterrows():
+                if not any(s["Site"] == row["domain"] for s in sites_info):
+                    sites_info.append({
+                        "Site": row["domain"],
+                        "Category": row["category"],
+                        "Location": row["location"]
+                    })
+    
     df_sites = pd.DataFrame(sites_info)
 
     # Merge uptime status if available

@@ -1,0 +1,19 @@
+[deploy]
+startCommand = "streamlit run dashboard.py --server.port $PORT --server.address 0.0.0.0 --server.headless true"
+healthcheckPath = "/"
+
+[[cronJobs]]
+schedule = "0 4 * * *"
+command = "python seo_guardian.py"
+
+[[cronJobs]]
+schedule = "0 5 * * *"
+command = "python rank_tracker.py"
+
+[[cronJobs]]
+schedule = "*/30 * * * *"
+command = "python uptime_monitor.py"
+
+[[cronJobs]]
+schedule = "0 7 1 * *"
+command = "python monthly_report.py"
