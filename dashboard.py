@@ -56,6 +56,17 @@ st.markdown("""
         border-radius: 10px;
         padding: 15px;
     }
+    .mini-chip {
+        display: inline-block;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-weight: 700;
+        margin-right: 8px;
+        font-size: 12px;
+    }
+    .chip-blue { background:#e8f1ff; color:#1f4fa8; }
+    .chip-red { background:#ffecec; color:#b03a2e; }
+    .chip-amber { background:#fff5db; color:#8a5a00; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -137,7 +148,6 @@ page = st.sidebar.radio("Navigate", [
     "📈 Rank Tracker",
     "🟢 Uptime Monitor",
     "🔬 Advanced Monitor",
-    "📋 All Sites",
 ])
 
 if st.sidebar.button("🔄 Refresh Data"):
@@ -157,191 +167,120 @@ copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "sb-up
 if page == "📊 Overview":
     st.title("📊 SEO Guardian — Overview")
     st.caption(f"Data from: {DB_PATH}")
-    if table_exists(conn, "daily_stats"):
-        global_7 = q(conn, """
-            SELECT COALESCE(SUM(total_keywords),0) keywords,
-                   COALESCE(SUM(total_clicks),0) clicks,
-                   COALESCE(SUM(suspicious_count),0) suspicious
-            FROM daily_stats
-            WHERE date BETWEEN date('now','-6 days') AND date('now')
-        """)
-        prev_7 = q(conn, """
-            SELECT COALESCE(SUM(total_keywords),0) keywords,
-                   COALESCE(SUM(total_clicks),0) clicks,
-                   COALESCE(SUM(suspicious_count),0) suspicious
-            FROM daily_stats
-            WHERE date BETWEEN date('now','-13 days') AND date('now','-7 days')
-        """)
-        global_30 = q(conn, """
-            SELECT COALESCE(SUM(total_keywords),0) keywords,
-                   COALESCE(SUM(total_clicks),0) clicks,
-                   COALESCE(SUM(suspicious_count),0) suspicious
-            FROM daily_stats
-            WHERE date BETWEEN date('now','-29 days') AND date('now')
-        """)
-        prev_30 = q(conn, """
-            SELECT COALESCE(SUM(total_keywords),0) keywords,
-                   COALESCE(SUM(total_clicks),0) clicks,
-                   COALESCE(SUM(suspicious_count),0) suspicious
-            FROM daily_stats
-            WHERE date BETWEEN date('now','-59 days') AND date('now','-30 days')
-        """)
-    else:
-        global_7 = prev_7 = global_30 = prev_30 = pd.DataFrame([{"keywords": 0, "clicks": 0, "suspicious": 0}])
+    # tiny global summary chips only
+    total_sites = int(q(conn, "SELECT COUNT(DISTINCT domain) c FROM managed_sites WHERE is_active=1").iloc[0]["c"]) if table_exists(conn, "managed_sites") else 0
+    down_sites = int(q(conn, "SELECT COUNT(*) c FROM uptime_status WHERE is_up=0").iloc[0]["c"]) if table_exists(conn, "uptime_status") else 0
+    suspicious_sites = int(q(conn, "SELECT COUNT(DISTINCT site) c FROM daily_stats WHERE date BETWEEN date('now','-6 days') AND date('now') AND suspicious_count > 0").iloc[0]["c"]) if table_exists(conn, "daily_stats") else 0
 
-    if table_exists(conn, "rank_history"):
-        rank_7 = q(conn, """
-            SELECT COALESCE(SUM(impressions),0) impressions,
-                   COALESCE(AVG(position),0) avg_position
+    st.markdown(
+        f"""
+        <span class='mini-chip chip-blue'>Total Sites: {total_sites}</span>
+        <span class='mini-chip chip-red'>Down Sites: {down_sites}</span>
+        <span class='mini-chip chip-amber'>Suspicious Sites (7d): {suspicious_sites}</span>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # site-wise dataset for cards (all sites, worst first)
+    site_rows = q(conn, """
+        WITH ds AS (
+            SELECT
+                site,
+                SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-13 days') AND date('now','-7 days') THEN total_keywords ELSE 0 END) keywords_prev_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_30d,
+                SUM(CASE WHEN date BETWEEN date('now','-59 days') AND date('now','-30 days') THEN total_keywords ELSE 0 END) keywords_prev_30d,
+                SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-13 days') AND date('now','-7 days') THEN total_clicks ELSE 0 END) clicks_prev_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_30d,
+                SUM(CASE WHEN date BETWEEN date('now','-59 days') AND date('now','-30 days') THEN total_clicks ELSE 0 END) clicks_prev_30d,
+                SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN suspicious_count ELSE 0 END) suspicious_7d
+            FROM daily_stats
+            GROUP BY site
+        ),
+        rk AS (
+            SELECT
+                site,
+                SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN impressions ELSE 0 END) impressions_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-13 days') AND date('now','-7 days') THEN impressions ELSE 0 END) impressions_prev_7d,
+                SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN impressions ELSE 0 END) impressions_30d,
+                SUM(CASE WHEN date BETWEEN date('now','-59 days') AND date('now','-30 days') THEN impressions ELSE 0 END) impressions_prev_30d,
+                AVG(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN position END) avg_pos_7d,
+                AVG(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN position END) avg_pos_30d
             FROM rank_history
-            WHERE date BETWEEN date('now','-6 days') AND date('now')
-        """)
-        rank_prev_7 = q(conn, """
-            SELECT COALESCE(SUM(impressions),0) impressions,
-                   COALESCE(AVG(position),0) avg_position
-            FROM rank_history
-            WHERE date BETWEEN date('now','-13 days') AND date('now','-7 days')
-        """)
-        rank_30 = q(conn, """
-            SELECT COALESCE(SUM(impressions),0) impressions,
-                   COALESCE(AVG(position),0) avg_position
-            FROM rank_history
-            WHERE date BETWEEN date('now','-29 days') AND date('now')
-        """)
-        rank_prev_30 = q(conn, """
-            SELECT COALESCE(SUM(impressions),0) impressions,
-                   COALESCE(AVG(position),0) avg_position
-            FROM rank_history
-            WHERE date BETWEEN date('now','-59 days') AND date('now','-30 days')
-        """)
-    else:
-        rank_7 = rank_prev_7 = rank_30 = rank_prev_30 = pd.DataFrame([{"impressions": 0, "avg_position": 0}])
-
-    st.subheader("Growth Cards — 7 Days vs Previous 7 Days")
-    g1, g2, g3, g4 = st.columns(4)
-    with g1:
-        st.metric("Keywords (7d)", f"{int(global_7['keywords'].iloc[0]):,}", delta=delta_text(float(global_7['keywords'].iloc[0]), float(prev_7['keywords'].iloc[0])))
-    with g2:
-        st.metric("Clicks (7d)", f"{int(global_7['clicks'].iloc[0]):,}", delta=delta_text(float(global_7['clicks'].iloc[0]), float(prev_7['clicks'].iloc[0])))
-    with g3:
-        st.metric("Impressions (7d)", f"{int(rank_7['impressions'].iloc[0]):,}", delta=delta_text(float(rank_7['impressions'].iloc[0]), float(rank_prev_7['impressions'].iloc[0])))
-    with g4:
-        st.metric("Avg Position (7d)", f"{float(rank_7['avg_position'].iloc[0]):.1f}", delta=delta_text(float(rank_7['avg_position'].iloc[0]), float(rank_prev_7['avg_position'].iloc[0])))
-
-    st.subheader("Growth Cards — 30 Days vs Previous 30 Days")
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Keywords (30d)", f"{int(global_30['keywords'].iloc[0]):,}", delta=delta_text(float(global_30['keywords'].iloc[0]), float(prev_30['keywords'].iloc[0])))
-    with m2:
-        st.metric("Clicks (30d)", f"{int(global_30['clicks'].iloc[0]):,}", delta=delta_text(float(global_30['clicks'].iloc[0]), float(prev_30['clicks'].iloc[0])))
-    with m3:
-        st.metric("Impressions (30d)", f"{int(rank_30['impressions'].iloc[0]):,}", delta=delta_text(float(rank_30['impressions'].iloc[0]), float(rank_prev_30['impressions'].iloc[0])))
-    with m4:
-        st.metric("Avg Position (30d)", f"{float(rank_30['avg_position'].iloc[0]):.1f}", delta=delta_text(float(rank_30['avg_position'].iloc[0]), float(rank_prev_30['avg_position'].iloc[0])))
-
-    st.markdown("---")
-
-    if table_exists(conn, "daily_stats"):
-        st.subheader("All Sites — Keyword Tracking Trend (Last 30 Days)")
-        trend_df = q(conn, """
-            SELECT date, site, SUM(total_keywords) total_keywords
-            FROM daily_stats
-            WHERE date >= date('now','-30 days')
-            GROUP BY date, site
-            ORDER BY date ASC
-        """)
-        if not trend_df.empty:
-            fig = px.line(trend_df, x="date", y="total_keywords", color="site", markers=False)
-            fig.update_layout(height=360, legend_title_text="Site")
-            st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("Site-Wise Growth Comparison")
-    site_compare = q(conn, """
+            GROUP BY site
+        ),
+        up AS (
+            SELECT
+                REPLACE(REPLACE(site, 'https://', ''), 'http://', '') site_clean,
+                is_up,
+                last_checked
+            FROM uptime_status
+        )
         SELECT
-            site,
-            SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_7d,
-            SUM(CASE WHEN date BETWEEN date('now','-13 days') AND date('now','-7 days') THEN total_clicks ELSE 0 END) clicks_prev_7d,
-            SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_30d,
-            SUM(CASE WHEN date BETWEEN date('now','-59 days') AND date('now','-30 days') THEN total_clicks ELSE 0 END) clicks_prev_30d,
-            SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_7d,
-            SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_30d
-        FROM daily_stats
-        GROUP BY site
-        ORDER BY clicks_7d DESC
+            ds.site,
+            COALESCE(ms.category, 'Uncategorized') category,
+            COALESCE(ms.location, 'Unknown') location,
+            COALESCE(ds.keywords_7d, 0) keywords_7d,
+            COALESCE(ds.keywords_prev_7d, 0) keywords_prev_7d,
+            COALESCE(ds.keywords_30d, 0) keywords_30d,
+            COALESCE(ds.keywords_prev_30d, 0) keywords_prev_30d,
+            COALESCE(ds.clicks_7d, 0) clicks_7d,
+            COALESCE(ds.clicks_prev_7d, 0) clicks_prev_7d,
+            COALESCE(ds.clicks_30d, 0) clicks_30d,
+            COALESCE(ds.clicks_prev_30d, 0) clicks_prev_30d,
+            COALESCE(rk.impressions_7d, 0) impressions_7d,
+            COALESCE(rk.impressions_prev_7d, 0) impressions_prev_7d,
+            COALESCE(rk.impressions_30d, 0) impressions_30d,
+            COALESCE(rk.impressions_prev_30d, 0) impressions_prev_30d,
+            COALESCE(rk.avg_pos_7d, 0) avg_pos_7d,
+            COALESCE(rk.avg_pos_30d, 0) avg_pos_30d,
+            COALESCE(ds.suspicious_7d, 0) suspicious_7d,
+            COALESCE(up.is_up, 1) is_up,
+            up.last_checked
+        FROM ds
+        LEFT JOIN rk ON rk.site = ds.site
+        LEFT JOIN managed_sites ms ON ms.domain = ds.site
+        LEFT JOIN up ON up.site_clean = ds.site
     """) if table_exists(conn, "daily_stats") else pd.DataFrame()
 
-    if not site_compare.empty:
-        site_compare["clicks_7d_delta"] = site_compare["clicks_7d"] - site_compare["clicks_prev_7d"]
-        site_compare["clicks_30d_delta"] = site_compare["clicks_30d"] - site_compare["clicks_prev_30d"]
-
-        c1, c2 = st.columns(2)
-        with c1:
-            fig_up = px.bar(site_compare.head(15), x="site", y="clicks_7d_delta", title="7d Click Growth by Site")
-            st.plotly_chart(fig_up, use_container_width=True)
-        with c2:
-            fig_up30 = px.bar(site_compare.head(15), x="site", y="clicks_30d_delta", title="30d Click Growth by Site")
-            st.plotly_chart(fig_up30, use_container_width=True)
-
-        st.dataframe(site_compare, use_container_width=True, hide_index=True)
-
-        site_pick = st.selectbox("Site Growth Cards", site_compare["site"].tolist())
-        row = site_compare[site_compare["site"] == site_pick].iloc[0]
-        s1, s2, s3, s4 = st.columns(4)
-        with s1:
-            st.metric("Site Clicks 7d", int(row["clicks_7d"]), delta=int(row["clicks_7d_delta"]))
-        with s2:
-            st.metric("Site Clicks 30d", int(row["clicks_30d"]), delta=int(row["clicks_30d_delta"]))
-        with s3:
-            st.metric("Site Keywords 7d", int(row["keywords_7d"]))
-        with s4:
-            st.metric("Site Keywords 30d", int(row["keywords_30d"]))
-
-    st.markdown("---")
-    st.subheader("Uptime Snapshot (Minimal)")
-    if table_exists(conn, "uptime_status"):
-        up_df = q(conn, "SELECT COUNT(*) total, SUM(is_up) up FROM uptime_status")
-        total_sites = int(up_df["total"].iloc[0]) if not up_df.empty else 0
-        up_sites = int(up_df["up"].iloc[0] or 0) if not up_df.empty else 0
-        down_sites = total_sites - up_sites
+    if site_rows.empty:
+        st.info("No site-wise metrics yet. Run scanners from sidebar Quick Actions.")
     else:
-        total_sites = up_sites = down_sites = 0
+        site_rows["risk_score"] = (
+            (1 - site_rows["is_up"]) * 1000
+            + (site_rows["suspicious_7d"] > 0).astype(int) * 100
+            + (site_rows["clicks_7d"] - site_rows["clicks_prev_7d"] < 0).astype(int) * 10
+        )
+        site_rows = site_rows.sort_values(["risk_score", "suspicious_7d", "clicks_7d"], ascending=[False, False, False])
 
-    avg_rt = q(conn, "SELECT AVG(response_time) rt FROM uptime_log WHERE timestamp >= datetime('now','-24 hours')") if table_exists(conn, "uptime_log") else pd.DataFrame([{"rt": 0}])
-    u1, u2, u3 = st.columns(3)
-    with u1:
-        st.metric("UP", up_sites)
-    with u2:
-        st.metric("DOWN", down_sites)
-    with u3:
-        st.metric("Avg Response (24h)", f"{float(avg_rt['rt'].iloc[0] or 0):.2f}s")
+        st.markdown("---")
+        st.subheader("Site-Wise Overview")
 
-    if table_exists(conn, "uptime_log"):
-        slow = q(conn, """
-            SELECT site, ROUND(AVG(response_time),2) avg_rt
-            FROM uptime_log
-            WHERE timestamp >= datetime('now','-24 hours')
-              AND response_time IS NOT NULL
-            GROUP BY site
-            ORDER BY avg_rt DESC
-            LIMIT 5
-        """)
-        spark = q(conn, """
-            SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour,
-                   ROUND(SUM(is_up) * 100.0 / COUNT(*), 1) as uptime_pct
-            FROM uptime_log
-            WHERE timestamp >= datetime('now','-24 hours')
-            GROUP BY strftime('%Y-%m-%d %H:00', timestamp)
-            ORDER BY hour
-        """)
+        for _, row in site_rows.iterrows():
+            status_icon = "🔴" if int(row["is_up"]) == 0 else "🟢"
+            with st.expander(f"{status_icon} {row['site']}  |  {row['category']}  |  {row['location']}", expanded=False):
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    st.metric("Keywords (7d)", f"{int(row['keywords_7d']):,}", delta=delta_text(float(row["keywords_7d"]), float(row["keywords_prev_7d"])))
+                with c2:
+                    st.metric("Clicks (7d)", f"{int(row['clicks_7d']):,}", delta=delta_text(float(row["clicks_7d"]), float(row["clicks_prev_7d"])))
+                with c3:
+                    st.metric("Impressions (7d)", f"{int(row['impressions_7d']):,}", delta=delta_text(float(row["impressions_7d"]), float(row["impressions_prev_7d"])))
+                with c4:
+                    st.metric("Avg Position (7d)", f"{float(row['avg_pos_7d']):.1f}", delta=delta_text(float(row["avg_pos_7d"]), float(row["avg_pos_30d"])))
 
-        ucol1, ucol2 = st.columns(2)
-        with ucol1:
-            st.caption("Top 5 Slowest Sites (24h)")
-            st.dataframe(slow, use_container_width=True, hide_index=True)
-        with ucol2:
-            fig_spark = px.line(spark, x="hour", y="uptime_pct", title="24h Uptime Trend")
-            fig_spark.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig_spark, use_container_width=True)
+                d1, d2, d3, d4 = st.columns(4)
+                with d1:
+                    st.metric("Keywords (30d)", f"{int(row['keywords_30d']):,}", delta=delta_text(float(row["keywords_30d"]), float(row["keywords_prev_30d"])))
+                with d2:
+                    st.metric("Clicks (30d)", f"{int(row['clicks_30d']):,}", delta=delta_text(float(row["clicks_30d"]), float(row["clicks_prev_30d"])))
+                with d3:
+                    st.metric("Impressions (30d)", f"{int(row['impressions_30d']):,}", delta=delta_text(float(row["impressions_30d"]), float(row["impressions_prev_30d"])))
+                with d4:
+                    st.metric("Suspicious (7d)", int(row["suspicious_7d"]))
+
+                st.caption(f"Uptime: {'UP' if int(row['is_up']) == 1 else 'DOWN'} | Last checked: {row['last_checked'] if pd.notna(row['last_checked']) else 'N/A'}")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -384,10 +323,8 @@ elif page == "🚨 Suspicious Keywords":
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
             st.info("No suspicious keywords stored yet. Run `python seo_guardian.py` first.")
-            copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sus-empty")
     else:
         st.warning("No suspicious keywords data found. Run `python seo_guardian.py` to populate data.")
-        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sus-missing")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -398,7 +335,6 @@ elif page == "📈 Rank Tracker":
 
     if not table_exists(conn, "rank_history"):
         st.warning("No rank history yet. Run `python rank_tracker.py` first.")
-        copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "rank-missing")
     else:
         sites = q(conn, "SELECT DISTINCT site FROM rank_history ORDER BY site")
         if sites.empty:
@@ -432,7 +368,7 @@ elif page == "📈 Rank Tracker":
                 display_latest["ctr"] = display_latest["ctr"].map(lambda v: f"{v:.2f}%")
 
                 st.dataframe(
-                    display_latest.style.applymap(style_position, subset=["position"]).format({"position": "{:.0f}"}),
+                    display_latest,
                     use_container_width=True, hide_index=True
                 )
 
@@ -479,7 +415,6 @@ elif page == "🟢 Uptime Monitor":
 
     if not table_exists(conn, "uptime_status"):
         st.warning("No uptime data yet. Run `python uptime_monitor.py` first.")
-        copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "uptime-missing")
     else:
         # Current status
         status_df = q(conn, "SELECT site, is_up, last_checked, down_since, consecutive_fails FROM uptime_status")
@@ -606,138 +541,3 @@ elif page == "🔬 Advanced Monitor":
         st.info("No external links data yet.")
 
 
-# ═══════════════════════════════════════════════════════════════════
-# PAGE: ALL SITES
-# ═══════════════════════════════════════════════════════════════════
-elif page == "📋 All Sites":
-    st.title("📋 All Sites Overview")
-
-    # ── Add New Site Form ─────────────────────────────────────────
-    with st.expander("➕ Add New Site to Monitoring", expanded=False):
-        st.markdown("Add a new website to SEO Guardian monitoring system.")
-        
-        with st.form("add_site_form"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                new_domain = st.text_input("Domain (e.g., example.com)", placeholder="example.com")
-                new_category = st.selectbox("Category", [
-                    "Digital Marketing", "E-Commerce", "Legal", "Cleaning", 
-                    "Painting", "Appliance Repair", "PPC / Google Ads",
-                    "Chemical Supply", "Blog", "Other"
-                ])
-            
-            with col2:
-                new_location = st.selectbox("Location", ["Dubai", "UAE", "Pakistan", "Global", "Other"])
-                gsc_url = st.text_input("Google Search Console URL", 
-                                       placeholder="https://example.com or sc-domain:example.com",
-                                       help="The exact URL as it appears in Google Search Console")
-            
-            keywords_raw = st.text_area("Target Keywords (one per line)", 
-                                       placeholder="keyword 1\nkeyword 2\nkeyword 3",
-                                       height=100)
-            
-            submitted = st.form_submit_button("✅ Add Site", use_container_width=True)
-            
-            if submitted:
-                if not new_domain:
-                    st.error("❌ Please enter a domain name")
-                else:
-                    try:
-                        # Create managed_sites table if it doesn't exist
-                        conn.execute("""
-                            CREATE TABLE IF NOT EXISTS managed_sites (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                domain TEXT UNIQUE NOT NULL,
-                                category TEXT,
-                                location TEXT,
-                                gsc_url TEXT,
-                                added_date DATE DEFAULT CURRENT_DATE,
-                                is_active INTEGER DEFAULT 1
-                            )
-                        """)
-                        
-                        # Create site_keywords table if it doesn't exist
-                        conn.execute("""
-                            CREATE TABLE IF NOT EXISTS site_keywords (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                site TEXT NOT NULL,
-                                keyword TEXT NOT NULL,
-                                added_date DATE DEFAULT CURRENT_DATE,
-                                UNIQUE(site, keyword)
-                            )
-                        """)
-                        
-                        # Insert site
-                        conn.execute("""
-                            INSERT OR REPLACE INTO managed_sites (domain, category, location, gsc_url, added_date)
-                            VALUES (?, ?, ?, ?, date('now'))
-                        """, (new_domain, new_category, new_location, gsc_url or f"https://{new_domain}"))
-                        
-                        # Insert keywords
-                        keywords = [k.strip() for k in keywords_raw.splitlines() if k.strip()]
-                        for kw in keywords:
-                            conn.execute("""
-                                INSERT OR IGNORE INTO site_keywords (site, keyword, added_date)
-                                VALUES (?, ?, date('now'))
-                            """, (new_domain, kw))
-                        
-                        conn.commit()
-                        st.success(f"✅ {new_domain} added successfully! Added {len(keywords)} keywords.")
-                        st.info("💡 The site will be included in the next automated scan. You can also verify it in Google Search Console.")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Error adding site: {e}")
-
-    st.markdown("---")
-
-    # ── Sites List (auto-synced from managed_sites / GSC) ────────────────────
-    sites_info = []
-
-    if table_exists(conn, "managed_sites"):
-        managed_df = q(conn, "SELECT domain, category, location FROM managed_sites WHERE is_active=1 ORDER BY domain")
-        if not managed_df.empty:
-            for _, row in managed_df.iterrows():
-                sites_info.append({
-                    "Site": row["domain"],
-                    "Category": row["category"] or "Uncategorized",
-                    "Location": row["location"] or "Unknown"
-                })
-
-    if not sites_info and table_exists(conn, "uptime_status"):
-        up_seed = q(conn, "SELECT DISTINCT site FROM uptime_status")
-        if not up_seed.empty:
-            for s in up_seed["site"].tolist():
-                clean = s.replace("https://", "").replace("http://", "").rstrip("/")
-                sites_info.append({"Site": clean, "Category": "Uncategorized", "Location": "Unknown"})
-
-    if not sites_info:
-        st.info("No managed sites found yet. Run `python seo_guardian.py` after granting GSC owner access to the service account.")
-        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "allsites-missing")
-        df_sites = pd.DataFrame(columns=["Site", "Category", "Location", "Uptime"])
-    else:
-        df_sites = pd.DataFrame(sites_info)
-
-    # Merge uptime status if available
-    if table_exists(conn, "uptime_status"):
-        up_df = q(conn, "SELECT site, is_up FROM uptime_status")
-        up_df["site_clean"] = up_df["site"].str.replace("https://","").str.rstrip("/")
-        up_map = dict(zip(up_df["site_clean"], up_df["is_up"]))
-        df_sites["Uptime"] = df_sites["Site"].map(lambda s: "🟢 UP" if up_map.get(s, 1) else "🔴 DOWN")
-    else:
-        df_sites["Uptime"] = "⚪ Unknown"
-
-    st.dataframe(df_sites, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.subheader("🔧 Run Commands")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "all-cmd-seo")
-        st.caption("Full SEO scan + email report")
-    with col2:
-        copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "all-cmd-rank")
-        st.caption("Track keyword positions")
-    with col3:
-        copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "all-cmd-up")
-        st.caption("Check all sites are live")

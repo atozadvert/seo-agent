@@ -46,6 +46,7 @@ CONFIG = {
     "token_file":     "token.pickle",
     "timeout":        10,    # seconds before marking as down
     "slow_threshold": 3.0,   # seconds — warn if response takes longer
+    "max_retries":    2,
 }
 
 def get_sites_from_gsc() -> list:
@@ -168,26 +169,74 @@ def log_check(conn, site: str, is_up: bool, status_code: int | None, response_ti
 
 # ── Check Site ────────────────────────────────────────────────────────────────
 def check_site(url: str) -> dict:
-    try:
+    headers = {
+        "User-Agent": "SEO-Guardian-Uptime/1.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    def _attempt(method: str, allow_redirects: bool = True):
         start = datetime.now()
-        r = requests.get(url, timeout=CONFIG["timeout"], allow_redirects=True,
-                         headers={"User-Agent": "SEO-Guardian-Uptime/1.0"})
+        resp = requests.request(
+            method,
+            url,
+            timeout=CONFIG["timeout"],
+            allow_redirects=allow_redirects,
+            headers=headers,
+        )
         elapsed = (datetime.now() - start).total_seconds()
-        is_up   = r.status_code < 500
-        slow    = elapsed > CONFIG["slow_threshold"]
-        return {
-            "is_up":       is_up,
-            "status_code": r.status_code,
-            "response_time": round(elapsed, 2),
-            "slow":        slow,
-            "error":       None,
-        }
-    except requests.exceptions.Timeout:
-        return {"is_up": False, "status_code": None, "response_time": None, "slow": False, "error": "Timeout"}
-    except requests.exceptions.ConnectionError as e:
-        return {"is_up": False, "status_code": None, "response_time": None, "slow": False, "error": "Connection refused"}
-    except Exception as e:
-        return {"is_up": False, "status_code": None, "response_time": None, "slow": False, "error": str(e)[:80]}
+        return resp, round(elapsed, 2)
+
+    last_error = None
+    for _ in range(CONFIG.get("max_retries", 2) + 1):
+        try:
+            r, elapsed = _attempt("GET", allow_redirects=True)
+            if r.status_code < 500:
+                return {
+                    "is_up": True,
+                    "status_code": r.status_code,
+                    "response_time": elapsed,
+                    "slow": elapsed > CONFIG["slow_threshold"],
+                    "error": None,
+                }
+            if r.status_code in (502, 503, 504):
+                # Retry transient gateway/server errors before marking down.
+                last_error = f"HTTP {r.status_code}"
+                continue
+            return {
+                "is_up": False,
+                "status_code": r.status_code,
+                "response_time": elapsed,
+                "slow": False,
+                "error": f"HTTP {r.status_code}",
+            }
+        except requests.exceptions.Timeout:
+            last_error = "Timeout"
+        except requests.exceptions.ConnectionError:
+            last_error = "Connection refused"
+        except Exception as e:
+            last_error = str(e)[:80]
+
+    # Fallback: some sites reject GET with full fetch but still respond to HEAD.
+    try:
+        r_head, elapsed_head = _attempt("HEAD", allow_redirects=True)
+        if r_head.status_code < 500:
+            return {
+                "is_up": True,
+                "status_code": r_head.status_code,
+                "response_time": elapsed_head,
+                "slow": elapsed_head > CONFIG["slow_threshold"],
+                "error": None,
+            }
+    except Exception:
+        pass
+
+    return {
+        "is_up": False,
+        "status_code": None,
+        "response_time": None,
+        "slow": False,
+        "error": last_error or "Unknown error",
+    }
 
 
 # ── Slack Alert ───────────────────────────────────────────────────────────────
