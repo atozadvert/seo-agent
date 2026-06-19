@@ -6,15 +6,19 @@ Run daily via Task Scheduler (added automatically by setup).
 """
 
 import os
+import json
+import base64
 import pickle
 import sqlite3
 import smtplib
+import requests
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
 # ── Load .env ────────────────────────────────────────────────────────────────
 try:
@@ -39,11 +43,13 @@ CONFIG = {
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
     "token_file":     "token.pickle",
-    "db_path":        "seo_guardian.db",
+    "db_path":        os.getenv("DB_PATH", "seo_guardian.db"),
     "drop_alert_threshold": 5,      # alert if position drops by this many spots
     "opportunity_min_impressions": 50,  # min impressions to be an opportunity
     "opportunity_pos_min": 4,       # positions 4-20 are "quick win" opportunities
     "opportunity_pos_max": 20,
+    "max_keywords_per_site": 40,
+    "dynamic_keyword_min_impressions": 5,
 }
 
 # ── Target Keywords to Track ──────────────────────────────────────────────────
@@ -120,15 +126,36 @@ def init_db(db_path: str) -> sqlite3.Connection:
             alert_type  TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS site_keywords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site TEXT NOT NULL,
+            keyword TEXT NOT NULL,
+            added_date DATE DEFAULT CURRENT_DATE,
+            UNIQUE(site, keyword)
+        )
+    """)
     conn.commit()
     return conn
 
 
 # ── Google Auth ───────────────────────────────────────────────────────────────
 def get_gsc_service():
+    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_b64:
+        try:
+            service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+            )
+            return build("webmasters", "v3", credentials=creds)
+        except Exception as ex:
+            print(f"   ⚠️  Invalid service-account credentials ({ex}) — trying token.pickle")
+
     token_file = CONFIG["token_file"]
     if not Path(token_file).exists():
-        raise FileNotFoundError(f"token.pickle not found. Run setup_google_auth.py first.")
+        raise FileNotFoundError("No GSC credentials found. Set GSC_SERVICE_ACCOUNT_JSON or run setup_google_auth.py")
     with open(token_file, "rb") as f:
         creds = pickle.load(f)
     if creds.expired and creds.refresh_token:
@@ -178,6 +205,60 @@ def get_verified_sites(service) -> dict:
         domain = url.replace("https://", "").replace("http://", "").replace("sc-domain:", "").rstrip("/").replace("www.", "")
         mapping[domain] = url
     return mapping
+
+
+def get_db_keywords(conn: sqlite3.Connection, site: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT keyword FROM site_keywords WHERE site=? ORDER BY keyword",
+        (site,),
+    ).fetchall()
+    return [r[0].strip().lower() for r in rows if r and r[0]]
+
+
+def save_discovered_keywords(conn: sqlite3.Connection, site: str, all_keywords: dict):
+    top_dynamic = sorted(
+        all_keywords.items(),
+        key=lambda kv: (-kv[1].get("impressions", 0), -kv[1].get("clicks", 0)),
+    )[:100]
+    for kw, _ in top_dynamic:
+        conn.execute(
+            "INSERT OR IGNORE INTO site_keywords (site, keyword, added_date) VALUES (?, ?, date('now'))",
+            (site, kw),
+        )
+    conn.commit()
+
+
+def build_keyword_targets(
+    manual_keywords: list[str],
+    db_keywords: list[str],
+    all_keywords: dict,
+    max_keywords: int,
+    min_impressions: int,
+) -> list[str]:
+    merged: list[str] = []
+    seen = set()
+
+    for kw in manual_keywords + db_keywords:
+        clean = kw.strip().lower()
+        if clean and clean not in seen:
+            merged.append(clean)
+            seen.add(clean)
+
+    dynamic_sorted = sorted(
+        all_keywords.items(),
+        key=lambda kv: (-kv[1].get("impressions", 0), -kv[1].get("clicks", 0)),
+    )
+    for kw, data in dynamic_sorted:
+        if len(merged) >= max_keywords:
+            break
+        if data.get("impressions", 0) < min_impressions:
+            continue
+        clean = kw.strip().lower()
+        if clean and clean not in seen:
+            merged.append(clean)
+            seen.add(clean)
+
+    return merged
 
 
 # ── Save & Compare ─────────────────────────────────────────────────────────────
@@ -460,14 +541,19 @@ def run():
             continue
 
         print(f"\n   🔍 {domain}")
-        all_keywords = fetch_keyword_positions(service, site_url, days=3)
+        all_keywords = fetch_keyword_positions(service, site_url, days=7)
+        save_discovered_keywords(conn, domain, all_keywords)
 
-        # Auto-populate top keywords for new sites with no configured keywords
-        if not keywords and all_keywords:
-            auto_kws = sorted(all_keywords.items(), key=lambda x: -x[1].get("impressions", 0))[:5]
-            keywords  = [k for k, _ in auto_kws]
-            TARGET_KEYWORDS[domain] = keywords
-            print(f"      ℹ️  Auto-tracking top {len(keywords)} keywords")
+        db_keywords = get_db_keywords(conn, domain)
+        keywords = build_keyword_targets(
+            manual_keywords=keywords,
+            db_keywords=db_keywords,
+            all_keywords=all_keywords,
+            max_keywords=CONFIG["max_keywords_per_site"],
+            min_impressions=CONFIG["dynamic_keyword_min_impressions"],
+        )
+        TARGET_KEYWORDS[domain] = keywords
+        print(f"      ℹ️  Tracking {len(keywords)} keywords")
 
         tracked = {}
         drops   = []
@@ -533,15 +619,17 @@ def run():
                 f":chart_with_upwards_trend: {gains_n} gains  "
                 f":bulb: {opps_n} opps"
             )
-            icon_rank = '\U0001f4c9' if total_drops else '\u2705'
-            blocks = [
+        icon_rank = "📉" if total_drops else "✅"
+        drops_icon = f"`{total_drops}` :rotating_light:" if total_drops else "`0` :white_check_mark:"
+        opportunities_count = sum(len(r["opportunities"]) for r in site_reports)
+        blocks = [
             {"type":"header","text":{"type":"plain_text",
-                    "text":f"{icon_rank} Rank Tracker — {today}"}},
+                "text":f"{icon_rank} Rank Tracker — {today}"}},
             {"type":"section","fields":[
                 {"type":"mrkdwn","text":f"*Sites:*\n{len(site_reports)}"},
-                {"type":"mrkdwn","text":f"*Rank Drops:*\n{'`'+str(total_drops)+'` :rotating_light:' if total_drops else '`0` :white_check_mark:'}"},
+                {"type":"mrkdwn","text":f"*Rank Drops:*\n{drops_icon}"},
                 {"type":"mrkdwn","text":f"*Rank Gains:*\n`{total_gains}` :chart_with_upwards_trend:"},
-                {"type":"mrkdwn","text":f"*Opportunities:*\n`{sum(len(r['opportunities']) for r in site_reports)}` :bulb:"},
+                {"type":"mrkdwn","text":f"*Opportunities:*\n`{opportunities_count}` :bulb:"},
             ]},
             {"type":"divider"},
             {"type":"section","text":{"type":"mrkdwn",

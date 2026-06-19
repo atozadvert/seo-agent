@@ -10,9 +10,11 @@ import json
 import pickle
 import smtplib
 import sqlite3
+import re
 import requests
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
@@ -95,6 +97,18 @@ def init_db():
         source TEXT DEFAULT 'gsc_auto',
         added_date DATE DEFAULT CURRENT_DATE,
         is_active INTEGER DEFAULT 1)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS site_keywords (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        site TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        added_date DATE DEFAULT CURRENT_DATE,
+        UNIQUE(site, keyword))''')
+    c.execute('''CREATE VIEW IF NOT EXISTS suspicious_keywords AS
+        SELECT site, keyword, category, clicks, impressions, position, date AS detected_date
+        FROM suspicious_log''')
+    c.execute('''CREATE VIEW IF NOT EXISTS site_scans AS
+        SELECT site, date AS scan_date, total_keywords, suspicious_count, total_clicks
+        FROM daily_stats''')
     conn.commit()
     return conn
 
@@ -105,23 +119,94 @@ def site_domain(site_url: str) -> str:
     return site_url.replace("https://", "").replace("http://", "").rstrip("/").lower()
 
 
+CATEGORY_RULES = {
+    "Appliance Repair": ["appliance", "repair", "acservice", "coffee", "fix", "service"],
+    "Digital Marketing": ["advert", "agency", "seo", "ppc", "marketing"],
+    "Flowers": ["flower", "florist", "blooms"],
+    "Automotive": ["auto", "garage", "car", "battery"],
+    "PRO Services": ["proservice", "id renewal", "visa"],
+    "Education": ["learn", "academy", "hub"],
+}
+
+LOCATION_RULES = [
+    "dubai", "sharjah", "abu dhabi", "uae", "qatar", "kuwait", "oman", "pakistan", "barcelona", "canada"
+]
+
+
+def infer_category_location(site_url: str, domain: str) -> tuple[str, str]:
+    category = "Uncategorized"
+    location = "Unknown"
+
+    try:
+        fetch_url = site_url
+        if fetch_url.startswith("sc-domain:"):
+            fetch_url = f"https://{fetch_url.replace('sc-domain:', '').strip('/')}"
+        elif not fetch_url.startswith("http"):
+            fetch_url = f"https://{domain}"
+
+        resp = requests.get(fetch_url, timeout=8, headers={"User-Agent": "SEO-Guardian-Meta/1.0"})
+        text = resp.text.lower()[:20000]
+    except Exception:
+        text = domain.lower()
+
+    haystack = f"{domain.lower()} {text}"
+
+    for cat, needles in CATEGORY_RULES.items():
+        if any(n in haystack for n in needles):
+            category = cat
+            break
+
+    for loc in LOCATION_RULES:
+        if loc in haystack:
+            location = loc.title()
+            break
+
+    parsed = urlparse(site_url if site_url.startswith("http") else f"https://{domain}")
+    host = parsed.netloc.lower() or domain.lower()
+    if location == "Unknown":
+        if host.endswith(".ae"):
+            location = "UAE"
+        elif host.endswith(".qa"):
+            location = "Qatar"
+        elif host.endswith(".pk"):
+            location = "Pakistan"
+        elif host.endswith(".ca"):
+            location = "Canada"
+
+    return category, location
+
+
 def sync_managed_sites_from_gsc(db, sites: list[str]) -> int:
     synced = 0
     for site_url in sites:
         domain = site_domain(site_url)
         if not domain:
             continue
+        row = db.execute(
+            "SELECT category, location FROM managed_sites WHERE domain=?",
+            (domain,),
+        ).fetchone()
+        existing_category = row[0] if row else None
+        existing_location = row[1] if row else None
+
+        should_enrich = (
+            not existing_category
+            or existing_category == "Uncategorized"
+            or not existing_location
+            or existing_location == "Unknown"
+        )
+        inferred_category, inferred_location = ("Uncategorized", "Unknown")
+        if should_enrich:
+            inferred_category, inferred_location = infer_category_location(site_url, domain)
+
+        final_category = existing_category if existing_category and existing_category != "Uncategorized" else inferred_category
+        final_location = existing_location if existing_location and existing_location != "Unknown" else inferred_location
+
         db.execute('''INSERT OR REPLACE INTO managed_sites
             (domain, category, location, gsc_url, source, added_date, is_active)
-            VALUES (
-                ?,
-                COALESCE((SELECT category FROM managed_sites WHERE domain=?), 'Uncategorized'),
-                COALESCE((SELECT location FROM managed_sites WHERE domain=?), 'Unknown'),
-                ?,
-                'gsc_auto',
-                date('now'),
-                1
-            )''', (domain, domain, domain, site_url))
+            VALUES (?, ?, ?, ?, 'gsc_auto', date('now'), 1)''',
+            (domain, final_category, final_location, site_url),
+        )
         synced += 1
     db.commit()
     return synced

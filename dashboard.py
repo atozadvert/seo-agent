@@ -120,8 +120,8 @@ if page == "📊 Overview":
     col1, col2, col3, col4 = st.columns(4)
 
     # Suspicious keywords count
-    if table_exists(conn, "site_scans"):
-        sus_df = q(conn, "SELECT SUM(suspicious_count) as total FROM site_scans WHERE date(scan_date) >= date('now','-7 days')")
+    if table_exists(conn, "daily_stats"):
+        sus_df = q(conn, "SELECT SUM(suspicious_count) as total FROM daily_stats WHERE date(date) >= date('now','-7 days')")
         total_sus = int(sus_df["total"].iloc[0] or 0) if not sus_df.empty else 0
     else:
         total_sus = 0
@@ -164,11 +164,11 @@ if page == "📊 Overview":
     st.markdown("---")
 
     # ── Suspicious keywords per site bar chart ─────────────────
-    if table_exists(conn, "site_scans"):
+    if table_exists(conn, "daily_stats"):
         df = q(conn, """
-            SELECT site, suspicious_count, total_keywords, scan_date
-            FROM site_scans
-            WHERE scan_date = (SELECT MAX(scan_date) FROM site_scans)
+            SELECT site, suspicious_count, total_keywords, date as scan_date
+            FROM daily_stats
+            WHERE date = (SELECT MAX(date) FROM daily_stats)
             ORDER BY suspicious_count DESC
         """)
         if not df.empty and df["suspicious_count"].sum() > 0:
@@ -207,17 +207,17 @@ if page == "📊 Overview":
 elif page == "🚨 Suspicious Keywords":
     st.title("🚨 Suspicious Keywords Monitor")
 
-    if table_exists(conn, "suspicious_keywords"):
-        sites = q(conn, "SELECT DISTINCT site FROM suspicious_keywords ORDER BY site")
+    if table_exists(conn, "suspicious_log"):
+        sites = q(conn, "SELECT DISTINCT site FROM suspicious_log ORDER BY site")
         selected = st.selectbox("Select Site", ["All Sites"] + list(sites["site"]) if not sites.empty else ["All Sites"])
 
         df = q(conn, """
-            SELECT site, keyword, category, clicks, impressions, position, detected_date
-            FROM suspicious_keywords
+            SELECT site, keyword, category, clicks, impressions, position, date as detected_date
+            FROM suspicious_log
             ORDER BY clicks DESC
         """) if selected == "All Sites" else q(conn, """
-            SELECT site, keyword, category, clicks, impressions, position, detected_date
-            FROM suspicious_keywords WHERE site=?
+            SELECT site, keyword, category, clicks, impressions, position, date as detected_date
+            FROM suspicious_log WHERE site=?
             ORDER BY clicks DESC
         """, (selected,))
 
@@ -235,7 +235,7 @@ elif page == "🚨 Suspicious Keywords":
         else:
             st.info("No suspicious keywords stored yet. Run `python seo_guardian.py` first.")
     else:
-        st.warning("No suspicious keywords table found. Run `python seo_guardian.py` to populate data.")
+        st.warning("No suspicious keywords data found. Run `python seo_guardian.py` to populate data.")
         st.code("python seo_guardian.py")
 
 
@@ -266,14 +266,22 @@ elif page == "📈 Rank Tracker":
             if not df_latest.empty:
                 st.subheader(f"Current Rankings — {selected_site}")
 
+                df_latest["position"] = pd.to_numeric(df_latest["position"], errors="coerce").round(1)
+                df_latest["ctr"] = pd.to_numeric(df_latest["ctr"], errors="coerce").fillna(0).round(2)
+                df_latest["clicks"] = pd.to_numeric(df_latest["clicks"], errors="coerce").fillna(0).astype(int)
+                df_latest["impressions"] = pd.to_numeric(df_latest["impressions"], errors="coerce").fillna(0).astype(int)
+
                 def style_position(val):
                     if pd.isna(val): return ""
                     if val <= 3:   return "color: #27ae60; font-weight: bold"
                     if val <= 10:  return "color: #f39c12; font-weight: bold"
                     return "color: #e74c3c"
 
+                display_latest = df_latest.copy()
+                display_latest["ctr"] = display_latest["ctr"].map(lambda v: f"{v:.2f}%")
+
                 st.dataframe(
-                    df_latest.style.applymap(style_position, subset=["position"]),
+                    display_latest.style.applymap(style_position, subset=["position"]),
                     use_container_width=True, hide_index=True
                 )
 

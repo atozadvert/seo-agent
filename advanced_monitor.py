@@ -10,6 +10,8 @@ Run daily via Task Scheduler at 9:15 AM.
 
 import os
 import re
+import json
+import base64
 import pickle
 import sqlite3
 import smtplib
@@ -21,6 +23,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
 try:
@@ -45,7 +48,7 @@ CONFIG = {
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
     "token_file":     "token.pickle",
-    "db_path":        "seo_guardian.db",
+    "db_path":        os.getenv("DB_PATH", "seo_guardian.db"),
     "indexing_threshold": 30,     # % daily change to trigger alert
     "redirect_timeout":   8,      # seconds
     "crawl_timeout":      8,
@@ -123,9 +126,21 @@ def init_db():
 
 # ── Google Auth ───────────────────────────────────────────────────────────────
 def get_gsc_service():
+    service_account_b64 = os.getenv("GSC_SERVICE_ACCOUNT_JSON", "").strip()
+    if service_account_b64:
+        try:
+            service_account_info = json.loads(base64.b64decode(service_account_b64).decode("utf-8"))
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=["https://www.googleapis.com/auth/webmasters.readonly"],
+            )
+            return build("webmasters", "v3", credentials=creds)
+        except Exception as ex:
+            print(f"⚠️  Invalid GSC_SERVICE_ACCOUNT_JSON ({ex}) — trying token.pickle")
+
     token_path = Path(CONFIG["token_file"])
     if not token_path.exists():
-        print("❌ No token.pickle. Run: python setup_google_auth.py")
+        print("❌ No GSC credentials found. Set GSC_SERVICE_ACCOUNT_JSON or run: python setup_google_auth.py")
         return None
     with open(token_path, "rb") as f:
         creds = pickle.load(f)
