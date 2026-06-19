@@ -259,7 +259,7 @@ if page == "📊 Overview":
 
         for _, row in site_rows.iterrows():
             status_icon = "🔴" if int(row["is_up"]) == 0 else "🟢"
-            with st.expander(f"{status_icon} {row['site']}  |  {row['category']}  |  {row['location']}", expanded=False):
+            with st.expander(f"{status_icon} {row['site']}  |  {row['category']}  |  {row['location']}", expanded=True):
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     st.metric("Keywords (7d)", f"{int(row['keywords_7d']):,}", delta=delta_text(float(row["keywords_7d"]), float(row["keywords_prev_7d"])))
