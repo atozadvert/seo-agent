@@ -9,6 +9,7 @@ import os
 import sqlite3
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
@@ -84,6 +85,45 @@ def q(conn, sql, params=()):
         return pd.DataFrame()
 
 
+def copy_button(label: str, command: str, key: str):
+        safe_cmd = command.replace("\\", "\\\\").replace("'", "\\'")
+        safe_key = key.replace("'", "")
+        components.html(
+                f"""
+                <button id='btn-{safe_key}' style='width:100%;padding:8px 10px;border:1px solid #d7dce5;border-radius:8px;background:#f8fafc;cursor:pointer'>
+                    {label}
+                </button>
+                <script>
+                    const btn = document.getElementById('btn-{safe_key}');
+                    btn.addEventListener('click', async () => {{
+                        try {{
+                            await navigator.clipboard.writeText('{safe_cmd}');
+                            btn.innerText = 'Copied';
+                            setTimeout(() => btn.innerText = '{label}', 1200);
+                        }} catch (e) {{
+                            btn.innerText = 'Copy failed';
+                        }}
+                    }});
+                </script>
+                """,
+                height=45,
+        )
+
+
+def pct_change(current, previous):
+        if previous in (None, 0):
+                return None
+        return round(((current - previous) / previous) * 100, 1)
+
+
+def delta_text(current, previous, suffix=""):
+        if previous in (None, 0):
+                return "No previous baseline"
+        pct = pct_change(current, previous)
+        sign = "+" if current - previous >= 0 else ""
+        return f"{sign}{current - previous:,.0f}{suffix} ({pct:+.1f}%)"
+
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 conn = get_conn()
 
@@ -106,7 +146,9 @@ if st.sidebar.button("🔄 Refresh Data"):
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Quick Actions**")
-st.sidebar.markdown("```\npython seo_guardian.py\npython rank_tracker.py\npython uptime_monitor.py\n```")
+copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sb-seo")
+copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "sb-rank")
+copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "sb-up")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -115,90 +157,191 @@ st.sidebar.markdown("```\npython seo_guardian.py\npython rank_tracker.py\npython
 if page == "📊 Overview":
     st.title("📊 SEO Guardian — Overview")
     st.caption(f"Data from: {DB_PATH}")
-
-    # ── Top metrics ─────────────────────────────────────────────
-    col1, col2, col3, col4 = st.columns(4)
-
-    # Suspicious keywords count
     if table_exists(conn, "daily_stats"):
-        sus_df = q(conn, "SELECT SUM(suspicious_count) as total FROM daily_stats WHERE date(date) >= date('now','-7 days')")
-        total_sus = int(sus_df["total"].iloc[0] or 0) if not sus_df.empty else 0
+        global_7 = q(conn, """
+            SELECT COALESCE(SUM(total_keywords),0) keywords,
+                   COALESCE(SUM(total_clicks),0) clicks,
+                   COALESCE(SUM(suspicious_count),0) suspicious
+            FROM daily_stats
+            WHERE date BETWEEN date('now','-6 days') AND date('now')
+        """)
+        prev_7 = q(conn, """
+            SELECT COALESCE(SUM(total_keywords),0) keywords,
+                   COALESCE(SUM(total_clicks),0) clicks,
+                   COALESCE(SUM(suspicious_count),0) suspicious
+            FROM daily_stats
+            WHERE date BETWEEN date('now','-13 days') AND date('now','-7 days')
+        """)
+        global_30 = q(conn, """
+            SELECT COALESCE(SUM(total_keywords),0) keywords,
+                   COALESCE(SUM(total_clicks),0) clicks,
+                   COALESCE(SUM(suspicious_count),0) suspicious
+            FROM daily_stats
+            WHERE date BETWEEN date('now','-29 days') AND date('now')
+        """)
+        prev_30 = q(conn, """
+            SELECT COALESCE(SUM(total_keywords),0) keywords,
+                   COALESCE(SUM(total_clicks),0) clicks,
+                   COALESCE(SUM(suspicious_count),0) suspicious
+            FROM daily_stats
+            WHERE date BETWEEN date('now','-59 days') AND date('now','-30 days')
+        """)
     else:
-        total_sus = 0
+        global_7 = prev_7 = global_30 = prev_30 = pd.DataFrame([{"keywords": 0, "clicks": 0, "suspicious": 0}])
 
-    # Uptime
-    if table_exists(conn, "uptime_status"):
-        up_df   = q(conn, "SELECT COUNT(*) as total, SUM(is_up) as up FROM uptime_status")
-        total_s = int(up_df["total"].iloc[0]) if not up_df.empty else 0
-        total_up= int(up_df["up"].iloc[0] or 0) if not up_df.empty else 0
-        down_count = total_s - total_up
+    if table_exists(conn, "rank_history"):
+        rank_7 = q(conn, """
+            SELECT COALESCE(SUM(impressions),0) impressions,
+                   COALESCE(AVG(position),0) avg_position
+            FROM rank_history
+            WHERE date BETWEEN date('now','-6 days') AND date('now')
+        """)
+        rank_prev_7 = q(conn, """
+            SELECT COALESCE(SUM(impressions),0) impressions,
+                   COALESCE(AVG(position),0) avg_position
+            FROM rank_history
+            WHERE date BETWEEN date('now','-13 days') AND date('now','-7 days')
+        """)
+        rank_30 = q(conn, """
+            SELECT COALESCE(SUM(impressions),0) impressions,
+                   COALESCE(AVG(position),0) avg_position
+            FROM rank_history
+            WHERE date BETWEEN date('now','-29 days') AND date('now')
+        """)
+        rank_prev_30 = q(conn, """
+            SELECT COALESCE(SUM(impressions),0) impressions,
+                   COALESCE(AVG(position),0) avg_position
+            FROM rank_history
+            WHERE date BETWEEN date('now','-59 days') AND date('now','-30 days')
+        """)
     else:
-        total_s = len([
-            "atozappliancesrepair.com","atozadvert.com","silverservicesae.com",
-            "silverpainters.com","ppcexpertsdubai.com","atiflawfirm.com",
-            "nacl.pk","premadedropshippingstores.com","pre-made-shopify-store.blogspot.com"
-        ])
-        down_count = 0
+        rank_7 = rank_prev_7 = rank_30 = rank_prev_30 = pd.DataFrame([{"impressions": 0, "avg_position": 0}])
 
-    # Rank alerts
-    if table_exists(conn, "rank_alerts"):
-        drops_df = q(conn, "SELECT COUNT(*) as c FROM rank_alerts WHERE alert_type='DROP' AND date(timestamp)=date('now')")
-        rank_drops = int(drops_df["c"].iloc[0]) if not drops_df.empty else 0
-    else:
-        rank_drops = 0
+    st.subheader("Growth Cards — 7 Days vs Previous 7 Days")
+    g1, g2, g3, g4 = st.columns(4)
+    with g1:
+        st.metric("Keywords (7d)", f"{int(global_7['keywords'].iloc[0]):,}", delta=delta_text(float(global_7['keywords'].iloc[0]), float(prev_7['keywords'].iloc[0])))
+    with g2:
+        st.metric("Clicks (7d)", f"{int(global_7['clicks'].iloc[0]):,}", delta=delta_text(float(global_7['clicks'].iloc[0]), float(prev_7['clicks'].iloc[0])))
+    with g3:
+        st.metric("Impressions (7d)", f"{int(rank_7['impressions'].iloc[0]):,}", delta=delta_text(float(rank_7['impressions'].iloc[0]), float(rank_prev_7['impressions'].iloc[0])))
+    with g4:
+        st.metric("Avg Position (7d)", f"{float(rank_7['avg_position'].iloc[0]):.1f}", delta=delta_text(float(rank_7['avg_position'].iloc[0]), float(rank_prev_7['avg_position'].iloc[0])))
 
-    with col1:
-        st.metric("🚨 Suspicious Keywords", f"{total_sus:,}", help="Last 7 days across all sites")
-    with col2:
-        color = "normal" if down_count == 0 else "inverse"
-        st.metric("🔴 Sites Down", down_count, delta=f"{total_s - down_count} up", delta_color=color)
-    with col3:
-        st.metric("📉 Rank Drops Today", rank_drops)
-    with col4:
-        if table_exists(conn, "uptime_log"):
-            checks = q(conn, "SELECT COUNT(*) as c FROM uptime_log WHERE date(timestamp)>=date('now','-1 days')")
-            st.metric("✅ Uptime Checks (24h)", int(checks["c"].iloc[0]) if not checks.empty else 0)
-        else:
-            st.metric("✅ Uptime Checks (24h)", 0)
+    st.subheader("Growth Cards — 30 Days vs Previous 30 Days")
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Keywords (30d)", f"{int(global_30['keywords'].iloc[0]):,}", delta=delta_text(float(global_30['keywords'].iloc[0]), float(prev_30['keywords'].iloc[0])))
+    with m2:
+        st.metric("Clicks (30d)", f"{int(global_30['clicks'].iloc[0]):,}", delta=delta_text(float(global_30['clicks'].iloc[0]), float(prev_30['clicks'].iloc[0])))
+    with m3:
+        st.metric("Impressions (30d)", f"{int(rank_30['impressions'].iloc[0]):,}", delta=delta_text(float(rank_30['impressions'].iloc[0]), float(rank_prev_30['impressions'].iloc[0])))
+    with m4:
+        st.metric("Avg Position (30d)", f"{float(rank_30['avg_position'].iloc[0]):.1f}", delta=delta_text(float(rank_30['avg_position'].iloc[0]), float(rank_prev_30['avg_position'].iloc[0])))
 
     st.markdown("---")
 
-    # ── Suspicious keywords per site bar chart ─────────────────
     if table_exists(conn, "daily_stats"):
-        df = q(conn, """
-            SELECT site, suspicious_count, total_keywords, date as scan_date
+        st.subheader("All Sites — Keyword Tracking Trend (Last 30 Days)")
+        trend_df = q(conn, """
+            SELECT date, site, SUM(total_keywords) total_keywords
             FROM daily_stats
-            WHERE date = (SELECT MAX(date) FROM daily_stats)
-            ORDER BY suspicious_count DESC
+            WHERE date >= date('now','-30 days')
+            GROUP BY date, site
+            ORDER BY date ASC
         """)
-        if not df.empty and df["suspicious_count"].sum() > 0:
-            st.subheader("🚨 Suspicious Keywords by Site (Latest Scan)")
-            fig = px.bar(df, x="site", y="suspicious_count",
-                         color="suspicious_count",
-                         color_continuous_scale=["#27ae60","#f39c12","#e74c3c"],
-                         labels={"site": "Site", "suspicious_count": "Suspicious Keywords"},
-                         text="suspicious_count")
-            fig.update_layout(showlegend=False, height=350)
-            fig.update_traces(textposition="outside")
+        if not trend_df.empty:
+            fig = px.line(trend_df, x="date", y="total_keywords", color="site", markers=False)
+            fig.update_layout(height=360, legend_title_text="Site")
             st.plotly_chart(fig, use_container_width=True)
 
-    # ── Uptime last 24h ────────────────────────────────────────
+    st.subheader("Site-Wise Growth Comparison")
+    site_compare = q(conn, """
+        SELECT
+            site,
+            SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_7d,
+            SUM(CASE WHEN date BETWEEN date('now','-13 days') AND date('now','-7 days') THEN total_clicks ELSE 0 END) clicks_prev_7d,
+            SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_clicks ELSE 0 END) clicks_30d,
+            SUM(CASE WHEN date BETWEEN date('now','-59 days') AND date('now','-30 days') THEN total_clicks ELSE 0 END) clicks_prev_30d,
+            SUM(CASE WHEN date BETWEEN date('now','-6 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_7d,
+            SUM(CASE WHEN date BETWEEN date('now','-29 days') AND date('now') THEN total_keywords ELSE 0 END) keywords_30d
+        FROM daily_stats
+        GROUP BY site
+        ORDER BY clicks_7d DESC
+    """) if table_exists(conn, "daily_stats") else pd.DataFrame()
+
+    if not site_compare.empty:
+        site_compare["clicks_7d_delta"] = site_compare["clicks_7d"] - site_compare["clicks_prev_7d"]
+        site_compare["clicks_30d_delta"] = site_compare["clicks_30d"] - site_compare["clicks_prev_30d"]
+
+        c1, c2 = st.columns(2)
+        with c1:
+            fig_up = px.bar(site_compare.head(15), x="site", y="clicks_7d_delta", title="7d Click Growth by Site")
+            st.plotly_chart(fig_up, use_container_width=True)
+        with c2:
+            fig_up30 = px.bar(site_compare.head(15), x="site", y="clicks_30d_delta", title="30d Click Growth by Site")
+            st.plotly_chart(fig_up30, use_container_width=True)
+
+        st.dataframe(site_compare, use_container_width=True, hide_index=True)
+
+        site_pick = st.selectbox("Site Growth Cards", site_compare["site"].tolist())
+        row = site_compare[site_compare["site"] == site_pick].iloc[0]
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            st.metric("Site Clicks 7d", int(row["clicks_7d"]), delta=int(row["clicks_7d_delta"]))
+        with s2:
+            st.metric("Site Clicks 30d", int(row["clicks_30d"]), delta=int(row["clicks_30d_delta"]))
+        with s3:
+            st.metric("Site Keywords 7d", int(row["keywords_7d"]))
+        with s4:
+            st.metric("Site Keywords 30d", int(row["keywords_30d"]))
+
+    st.markdown("---")
+    st.subheader("Uptime Snapshot (Minimal)")
+    if table_exists(conn, "uptime_status"):
+        up_df = q(conn, "SELECT COUNT(*) total, SUM(is_up) up FROM uptime_status")
+        total_sites = int(up_df["total"].iloc[0]) if not up_df.empty else 0
+        up_sites = int(up_df["up"].iloc[0] or 0) if not up_df.empty else 0
+        down_sites = total_sites - up_sites
+    else:
+        total_sites = up_sites = down_sites = 0
+
+    avg_rt = q(conn, "SELECT AVG(response_time) rt FROM uptime_log WHERE timestamp >= datetime('now','-24 hours')") if table_exists(conn, "uptime_log") else pd.DataFrame([{"rt": 0}])
+    u1, u2, u3 = st.columns(3)
+    with u1:
+        st.metric("UP", up_sites)
+    with u2:
+        st.metric("DOWN", down_sites)
+    with u3:
+        st.metric("Avg Response (24h)", f"{float(avg_rt['rt'].iloc[0] or 0):.2f}s")
+
     if table_exists(conn, "uptime_log"):
-        st.subheader("🟢 Uptime — Last 24 Hours")
-        df = q(conn, """
-            SELECT site, AVG(response_time) as avg_rt, 
-                   SUM(is_up)*100.0/COUNT(*) as uptime_pct,
-                   COUNT(*) as checks
+        slow = q(conn, """
+            SELECT site, ROUND(AVG(response_time),2) avg_rt
             FROM uptime_log
             WHERE timestamp >= datetime('now','-24 hours')
-            GROUP BY site ORDER BY uptime_pct ASC
+              AND response_time IS NOT NULL
+            GROUP BY site
+            ORDER BY avg_rt DESC
+            LIMIT 5
         """)
-        if not df.empty:
-            df["site"] = df["site"].str.replace("https://","").str.rstrip("/")
-            df["uptime_pct"] = df["uptime_pct"].round(1)
-            df["avg_rt"] = df["avg_rt"].round(2)
-            df.columns = ["Site", "Avg Response (s)", "Uptime %", "Checks"]
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        spark = q(conn, """
+            SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour,
+                   ROUND(SUM(is_up) * 100.0 / COUNT(*), 1) as uptime_pct
+            FROM uptime_log
+            WHERE timestamp >= datetime('now','-24 hours')
+            GROUP BY strftime('%Y-%m-%d %H:00', timestamp)
+            ORDER BY hour
+        """)
+
+        ucol1, ucol2 = st.columns(2)
+        with ucol1:
+            st.caption("Top 5 Slowest Sites (24h)")
+            st.dataframe(slow, use_container_width=True, hide_index=True)
+        with ucol2:
+            fig_spark = px.line(spark, x="hour", y="uptime_pct", title="24h Uptime Trend")
+            fig_spark.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10))
+            st.plotly_chart(fig_spark, use_container_width=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -224,6 +367,13 @@ elif page == "🚨 Suspicious Keywords":
         if not df.empty:
             st.metric("Total Suspicious Keywords", len(df))
 
+            df["category"] = (
+                df["category"].astype(str)
+                .str.replace("ðŸ’€ ", "", regex=False)
+                .str.replace("ðŸ˜¤ ", "", regex=False)
+                .str.replace("ðŸŽ° ", "", regex=False)
+            )
+
             # By category
             cat_counts = df["category"].value_counts().reset_index()
             cat_counts.columns = ["Category", "Count"]
@@ -234,9 +384,10 @@ elif page == "🚨 Suspicious Keywords":
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
             st.info("No suspicious keywords stored yet. Run `python seo_guardian.py` first.")
+            copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sus-empty")
     else:
         st.warning("No suspicious keywords data found. Run `python seo_guardian.py` to populate data.")
-        st.code("python seo_guardian.py")
+        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sus-missing")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -247,7 +398,7 @@ elif page == "📈 Rank Tracker":
 
     if not table_exists(conn, "rank_history"):
         st.warning("No rank history yet. Run `python rank_tracker.py` first.")
-        st.code("python rank_tracker.py")
+        copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "rank-missing")
     else:
         sites = q(conn, "SELECT DISTINCT site FROM rank_history ORDER BY site")
         if sites.empty:
@@ -266,7 +417,7 @@ elif page == "📈 Rank Tracker":
             if not df_latest.empty:
                 st.subheader(f"Current Rankings — {selected_site}")
 
-                df_latest["position"] = pd.to_numeric(df_latest["position"], errors="coerce").round(1)
+                df_latest["position"] = pd.to_numeric(df_latest["position"], errors="coerce").round(0).astype("Int64")
                 df_latest["ctr"] = pd.to_numeric(df_latest["ctr"], errors="coerce").fillna(0).round(2)
                 df_latest["clicks"] = pd.to_numeric(df_latest["clicks"], errors="coerce").fillna(0).astype(int)
                 df_latest["impressions"] = pd.to_numeric(df_latest["impressions"], errors="coerce").fillna(0).astype(int)
@@ -281,7 +432,7 @@ elif page == "📈 Rank Tracker":
                 display_latest["ctr"] = display_latest["ctr"].map(lambda v: f"{v:.2f}%")
 
                 st.dataframe(
-                    display_latest.style.applymap(style_position, subset=["position"]),
+                    display_latest.style.applymap(style_position, subset=["position"]).format({"position": "{:.0f}"}),
                     use_container_width=True, hide_index=True
                 )
 
@@ -313,6 +464,8 @@ elif page == "📈 Rank Tracker":
                     ORDER BY timestamp DESC LIMIT 50
                 """, (selected_site,))
                 if not alerts.empty:
+                    for col in ["old_pos", "new_pos", "change"]:
+                        alerts[col] = pd.to_numeric(alerts[col], errors="coerce").round(0).astype("Int64")
                     st.dataframe(alerts, use_container_width=True, hide_index=True)
                 else:
                     st.success("No significant rank changes recorded yet.")
@@ -326,7 +479,7 @@ elif page == "🟢 Uptime Monitor":
 
     if not table_exists(conn, "uptime_status"):
         st.warning("No uptime data yet. Run `python uptime_monitor.py` first.")
-        st.code("python uptime_monitor.py")
+        copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "uptime-missing")
     else:
         # Current status
         status_df = q(conn, "SELECT site, is_up, last_checked, down_since, consecutive_fails FROM uptime_status")
@@ -560,7 +713,7 @@ elif page == "📋 All Sites":
 
     if not sites_info:
         st.info("No managed sites found yet. Run `python seo_guardian.py` after granting GSC owner access to the service account.")
-        st.code("python seo_guardian.py")
+        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "allsites-missing")
         df_sites = pd.DataFrame(columns=["Site", "Category", "Location", "Uptime"])
     else:
         df_sites = pd.DataFrame(sites_info)
@@ -580,11 +733,11 @@ elif page == "📋 All Sites":
     st.subheader("🔧 Run Commands")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.code("python seo_guardian.py", language="bash")
+        copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "all-cmd-seo")
         st.caption("Full SEO scan + email report")
     with col2:
-        st.code("python rank_tracker.py", language="bash")
+        copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "all-cmd-rank")
         st.caption("Track keyword positions")
     with col3:
-        st.code("python uptime_monitor.py", language="bash")
+        copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "all-cmd-up")
         st.caption("Check all sites are live")

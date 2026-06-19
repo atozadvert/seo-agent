@@ -52,25 +52,34 @@ CONFIG = {
     "min_clicks_alert": 1,
     "drop_threshold": 30,
     "db_path": os.getenv("DB_PATH", "seo_guardian.db"),
+    "suspicious_min_impressions": 20,
 }
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  SUSPICIOUS PATTERNS
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 SUSPICIOUS_PATTERNS = {
-    "ðŸŽ° Gambling/Slot Spam": [
+    "Gambling/Spam": [
         "slot", "gacor", "togel", "toto", "jackpot", "maxwin",
         "bocoran", "judi", "casino", "betting", "poker",
         "kicau", "bacan", "madura", "sengtoto", "watitoto",
         "lotery", "lotere", "bandot", "slothok",
     ],
-    "ðŸ”ž Adult Content":    ["porn", "sex", "xxx", "adult", "nude", "escort"],
-    "ðŸ’Š Drugs/Illegal":    ["drug", "buy weed", "cocaine", "pills online"],
-    "â‚¿ Crypto Spam":       ["bitcoin", "crypto", "nft", "forex scam"],
-    "ðŸ’€ Hack/Inject":      ["hack", "crack", "keygen", "torrent", "nulled", "warez"],
-    "ðŸ˜¤ Complaints":       ["scam", "fraud", "fake", "cheat", "ripoff",
-                            "rip off", "overcharged", "worst", "avoid"],
-    "ðŸ’¼ Wrong Intent":     ["hiring", "job vacancy", "salary", "internship"],
+    "Adult Content": ["porn", "sex", "xxx", "adult", "nude", "escort"],
+    "Drugs/Illegal": ["drug", "buy weed", "cocaine", "pills online"],
+    "Hack/Inject": [
+        "hack tool", "site hacked", "sql injection", "xss attack",
+        "keygen", "torrent download", "nulled script", "warez"
+    ],
+    "Phishing/Malware": [
+        "phishing", "malware", "ransomware", "trojan", "botnet", "credential steal"
+    ],
+}
+
+REPUTATION_PATTERNS = {
+    "Reputation/Complaints": [
+        "scam", "fraud", "fake", "cheat", "ripoff", "rip off", "overcharged", "worst", "avoid"
+    ]
 }
 
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -293,12 +302,16 @@ def fetch_7day_avg(service, site_url):
 #  ANALYSIS
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def classify_keyword(query):
-    q = query.lower()
+    q = query.lower().strip()
     for category, patterns in SUSPICIOUS_PATTERNS.items():
         for p in patterns:
-            if p in q:
-                return True, category
-    return False, None
+            if re.search(r"\b" + re.escape(p.lower()) + r"\b", q):
+                return "suspicious", category
+    for category, patterns in REPUTATION_PATTERNS.items():
+        for p in patterns:
+            if re.search(r"\b" + re.escape(p.lower()) + r"\b", q):
+                return "reputation", category
+    return "normal", None
 
 def analyze_site(service, site_url, db):
     domain = site_url.replace("https://", "").replace("http://", "").rstrip("/")
@@ -324,7 +337,8 @@ def analyze_site(service, site_url, db):
         ctr        = round(row.get('ctr', 0) * 100, 2)
         total_clicks += clicks
 
-        is_sus, category = classify_keyword(keyword)
+        cls, category = classify_keyword(keyword)
+        is_sus = cls == "suspicious" and impressions >= CONFIG["suspicious_min_impressions"]
         if is_sus:
             suspicious_by_cat.setdefault(category, []).append({
                 "keyword": keyword, "clicks": clicks,
