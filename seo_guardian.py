@@ -112,6 +112,17 @@ def init_db():
         keyword TEXT NOT NULL,
         added_date DATE DEFAULT CURRENT_DATE,
         UNIQUE(site, keyword))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS all_keywords_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        site TEXT NOT NULL,
+        date TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        clicks INTEGER DEFAULT 0,
+        impressions INTEGER DEFAULT 0,
+        position REAL,
+        ctr REAL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(site, date, keyword))''')
     c.execute('''CREATE VIEW IF NOT EXISTS suspicious_keywords AS
         SELECT site, keyword, category, clicks, impressions, position, date AS detected_date
         FROM suspicious_log''')
@@ -336,6 +347,11 @@ def analyze_site(service, site_url, db):
         position   = round(row.get('position', 0), 1)
         ctr        = round(row.get('ctr', 0) * 100, 2)
         total_clicks += clicks
+
+        db.execute('''INSERT OR REPLACE INTO all_keywords_history
+            (site, date, keyword, clicks, impressions, position, ctr)
+            VALUES (?,?,?,?,?,?,?)''',
+            (domain, today, keyword, clicks, impressions, position, ctr))
 
         cls, category = classify_keyword(keyword)
         is_sus = cls == "suspicious" and impressions >= CONFIG["suspicious_min_impressions"]

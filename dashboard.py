@@ -145,6 +145,7 @@ st.sidebar.caption(f"Last refreshed: {datetime.now().strftime('%I:%M %p')}")
 page = st.sidebar.radio("Navigate", [
     "📊 Overview",
     "🚨 Suspicious Keywords",
+    "🧾 All Keywords",
     "📈 Rank Tracker",
     "🟢 Uptime Monitor",
     "🔬 Advanced Monitor",
@@ -325,6 +326,103 @@ elif page == "🚨 Suspicious Keywords":
             st.info("No suspicious keywords stored yet. Run `python seo_guardian.py` first.")
     else:
         st.warning("No suspicious keywords data found. Run `python seo_guardian.py` to populate data.")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAGE: ALL KEYWORDS
+# ═══════════════════════════════════════════════════════════════════
+elif page == "🧾 All Keywords":
+    st.title("🧾 All Keywords Explorer")
+    st.caption("Every fetched Google Search Console query stored by site and day.")
+
+    if not table_exists(conn, "all_keywords_history"):
+        st.warning("No full keyword history table found yet. Run `python seo_guardian.py` once to start collecting all keywords.")
+    else:
+        sites_df = q(conn, "SELECT DISTINCT site FROM all_keywords_history ORDER BY site")
+        minmax_df = q(conn, "SELECT MIN(date) as min_date, MAX(date) as max_date FROM all_keywords_history")
+
+        all_sites = ["All Sites"] + (sites_df["site"].tolist() if not sites_df.empty else [])
+        selected_site = st.selectbox("Site", all_sites)
+
+        default_end = datetime.now().date()
+        default_start = default_end - timedelta(days=29)
+        if not minmax_df.empty and pd.notna(minmax_df.iloc[0]["min_date"]) and pd.notna(minmax_df.iloc[0]["max_date"]):
+            db_min = datetime.strptime(str(minmax_df.iloc[0]["min_date"]), "%Y-%m-%d").date()
+            db_max = datetime.strptime(str(minmax_df.iloc[0]["max_date"]), "%Y-%m-%d").date()
+            default_start = max(db_min, default_start)
+            default_end = db_max
+
+        c1, c2, c3 = st.columns([1, 1, 2])
+        with c1:
+            start_date = st.date_input("From", value=default_start)
+        with c2:
+            end_date = st.date_input("To", value=default_end)
+        with c3:
+            search_term = st.text_input("Keyword contains", value="").strip().lower()
+
+        c4, c5 = st.columns([1, 1])
+        with c4:
+            min_impressions = st.number_input("Min impressions", min_value=0, value=0, step=1)
+        with c5:
+            rows_per_page = st.selectbox("Rows per page", [100, 250, 500, 1000, 5000], index=2)
+
+        where_clauses = ["date BETWEEN ? AND ?", "impressions >= ?"]
+        params = [str(start_date), str(end_date), int(min_impressions)]
+
+        if selected_site != "All Sites":
+            where_clauses.append("site = ?")
+            params.append(selected_site)
+        if search_term:
+            where_clauses.append("LOWER(keyword) LIKE ?")
+            params.append(f"%{search_term}%")
+
+        where_sql = " WHERE " + " AND ".join(where_clauses)
+
+        total_df = q(conn, f"SELECT COUNT(*) as c FROM all_keywords_history{where_sql}", tuple(params))
+        total_rows = int(total_df.iloc[0]["c"]) if not total_df.empty else 0
+        st.metric("Matching Keywords", f"{total_rows:,}")
+
+        if total_rows == 0:
+            st.info("No matching keywords found for current filters.")
+        else:
+            max_page = max(1, (total_rows + int(rows_per_page) - 1) // int(rows_per_page))
+            page_num = st.number_input("Page", min_value=1, max_value=max_page, value=1, step=1)
+            offset = (int(page_num) - 1) * int(rows_per_page)
+
+            data_sql = f"""
+                SELECT date, site, keyword, clicks, impressions, position, ctr
+                FROM all_keywords_history
+                {where_sql}
+                ORDER BY date DESC, impressions DESC, clicks DESC
+                LIMIT ? OFFSET ?
+            """
+            page_df = q(conn, data_sql, tuple(params + [int(rows_per_page), int(offset)]))
+            st.dataframe(page_df, use_container_width=True, hide_index=True)
+
+            st.caption(f"Showing page {int(page_num)} of {max_page}")
+
+            csv_page = page_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download current page CSV",
+                data=csv_page,
+                file_name=f"all_keywords_page_{int(page_num)}.csv",
+                mime="text/csv",
+            )
+
+            if st.button("Prepare full filtered CSV"):
+                full_sql = f"""
+                    SELECT date, site, keyword, clicks, impressions, position, ctr
+                    FROM all_keywords_history
+                    {where_sql}
+                    ORDER BY date DESC, impressions DESC, clicks DESC
+                """
+                full_df = q(conn, full_sql, tuple(params))
+                st.download_button(
+                    "Download full filtered CSV",
+                    data=full_df.to_csv(index=False).encode("utf-8"),
+                    file_name="all_keywords_full_filtered.csv",
+                    mime="text/csv",
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════
