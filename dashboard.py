@@ -157,9 +157,9 @@ if st.sidebar.button("🔄 Refresh Data"):
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Quick Actions**")
-copy_button("Copy: python seo_guardian.py", "python seo_guardian.py", "sb-seo")
-copy_button("Copy: python rank_tracker.py", "python rank_tracker.py", "sb-rank")
-copy_button("Copy: python uptime_monitor.py", "python uptime_monitor.py", "sb-up")
+st.sidebar.code("python seo_guardian.py", language="bash")
+st.sidebar.code("python rank_tracker.py", language="bash")
+st.sidebar.code("python uptime_monitor.py", language="bash")
 
 
 # ═══════════════════════════════════════════════════════════════════
