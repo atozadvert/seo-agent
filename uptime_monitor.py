@@ -34,6 +34,8 @@ except ImportError:
                 os.environ.setdefault(k.strip(), v.strip())
 
 # ── Config ────────────────────────────────────────────────────────────────────
+DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+
 CONFIG = {
     "email_to":       "info@atozadvert.com",
     "email_cc":       "ziarandhawa841@gmail.com",
@@ -42,7 +44,7 @@ CONFIG = {
     "smtp_server":    os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
-    "db_path":        os.getenv("DB_PATH", "seo_guardian.db"),
+    "db_path":        os.getenv("DB_PATH", DEFAULT_DB_PATH),
     "token_file":     "token.pickle",
     "timeout":        10,    # seconds before marking as down
     "slow_threshold": 3.0,   # seconds — warn if response takes longer

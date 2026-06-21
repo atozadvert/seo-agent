@@ -28,7 +28,8 @@ except ImportError:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-DB_PATH = os.getenv("DB_PATH", "seo_guardian.db")
+DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+DB_PATH = os.getenv("DB_PATH", DEFAULT_DB_PATH)
 
 st.set_page_config(
     page_title="SEO Guardian Dashboard",

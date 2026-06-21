@@ -39,6 +39,8 @@ except ImportError:
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  CONFIGURATION
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+
 CONFIG = {
     "email_to":       "info@atozadvert.com",
     "email_cc":       "ziarandhawa841@gmail.com",
@@ -51,7 +53,7 @@ CONFIG = {
     "days_lookback":  7,        # 7 for first run; change to 1 for daily use
     "min_clicks_alert": 1,
     "drop_threshold": 30,
-    "db_path": os.getenv("DB_PATH", "seo_guardian.db"),
+    "db_path": os.getenv("DB_PATH", DEFAULT_DB_PATH),
     "suspicious_min_impressions": 20,
 }
 

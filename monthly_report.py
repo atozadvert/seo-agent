@@ -25,6 +25,8 @@ except ImportError:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
+DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+
 CONFIG = {
     "email_to": "info@atozadvert.com",
     "email_cc": "ziarandhawa841@gmail.com",
@@ -32,7 +34,7 @@ CONFIG = {
     "email_password": os.getenv("EMAIL_PASSWORD", ""),
     "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port": 587,
-    "db_path": os.getenv("DB_PATH", "seo_guardian.db"),
+    "db_path": os.getenv("DB_PATH", DEFAULT_DB_PATH),
 }
 
 
