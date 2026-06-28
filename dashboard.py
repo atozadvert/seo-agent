@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, date
 from pathlib import Path
 
 from config_paths import get_db_path
+from dashboard_utils import safe_int, safe_int_series, safe_float
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
 try:
@@ -247,15 +248,15 @@ if page == "📊 Overview":
                 prev_30d = site_ds[(site_ds["date"].dt.date >= cutoff_prev_30d) & (site_ds["date"].dt.date < cutoff_30d)]
                 latest_row = site_ds.iloc[-1]
 
-                site_rows.loc[site_rows["site"] == site, "keywords_7d"] = int(recent_7d["total_keywords"].sum()) if not recent_7d.empty else int(latest_row["total_keywords"])
-                site_rows.loc[site_rows["site"] == site, "keywords_prev_7d"] = int(prev_7d["total_keywords"].sum()) if not prev_7d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "keywords_30d"] = int(recent_30d["total_keywords"].sum()) if not recent_30d.empty else int(latest_row["total_keywords"])
-                site_rows.loc[site_rows["site"] == site, "keywords_prev_30d"] = int(prev_30d["total_keywords"].sum()) if not prev_30d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "clicks_7d"] = int(recent_7d["total_clicks"].sum()) if not recent_7d.empty else int(latest_row["total_clicks"])
-                site_rows.loc[site_rows["site"] == site, "clicks_prev_7d"] = int(prev_7d["total_clicks"].sum()) if not prev_7d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "clicks_30d"] = int(recent_30d["total_clicks"].sum()) if not recent_30d.empty else int(latest_row["total_clicks"])
-                site_rows.loc[site_rows["site"] == site, "clicks_prev_30d"] = int(prev_30d["total_clicks"].sum()) if not prev_30d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "suspicious_7d"] = int(recent_7d["suspicious_count"].sum()) if not recent_7d.empty else int(latest_row["suspicious_count"])
+                site_rows.loc[site_rows["site"] == site, "keywords_7d"] = safe_int(recent_7d["total_keywords"].sum()) if not recent_7d.empty else safe_int(latest_row["total_keywords"])
+                site_rows.loc[site_rows["site"] == site, "keywords_prev_7d"] = safe_int(prev_7d["total_keywords"].sum()) if not prev_7d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "keywords_30d"] = safe_int(recent_30d["total_keywords"].sum()) if not recent_30d.empty else safe_int(latest_row["total_keywords"])
+                site_rows.loc[site_rows["site"] == site, "keywords_prev_30d"] = safe_int(prev_30d["total_keywords"].sum()) if not prev_30d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "clicks_7d"] = safe_int(recent_7d["total_clicks"].sum()) if not recent_7d.empty else safe_int(latest_row["total_clicks"])
+                site_rows.loc[site_rows["site"] == site, "clicks_prev_7d"] = safe_int(prev_7d["total_clicks"].sum()) if not prev_7d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "clicks_30d"] = safe_int(recent_30d["total_clicks"].sum()) if not recent_30d.empty else safe_int(latest_row["total_clicks"])
+                site_rows.loc[site_rows["site"] == site, "clicks_prev_30d"] = safe_int(prev_30d["total_clicks"].sum()) if not prev_30d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "suspicious_7d"] = safe_int(recent_7d["suspicious_count"].sum()) if not recent_7d.empty else safe_int(latest_row["suspicious_count"])
 
     if table_exists(conn, "rank_history"):
         rk = q(conn, """
@@ -282,12 +283,12 @@ if page == "📊 Overview":
                 prev_30d = site_rk[(site_rk["date"].dt.date >= cutoff_prev_30d) & (site_rk["date"].dt.date < cutoff_30d)]
                 latest_row = site_rk.iloc[-1]
 
-                site_rows.loc[site_rows["site"] == site, "impressions_7d"] = int(recent_7d["impressions"].sum()) if not recent_7d.empty else int(latest_row["impressions"])
-                site_rows.loc[site_rows["site"] == site, "impressions_prev_7d"] = int(prev_7d["impressions"].sum()) if not prev_7d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "impressions_30d"] = int(recent_30d["impressions"].sum()) if not recent_30d.empty else int(latest_row["impressions"])
-                site_rows.loc[site_rows["site"] == site, "impressions_prev_30d"] = int(prev_30d["impressions"].sum()) if not prev_30d.empty else 0
-                site_rows.loc[site_rows["site"] == site, "avg_pos_7d"] = float(recent_7d["position"].mean()) if not recent_7d.empty else float(latest_row["position"])
-                site_rows.loc[site_rows["site"] == site, "avg_pos_30d"] = float(recent_30d["position"].mean()) if not recent_30d.empty else float(latest_row["position"])
+                site_rows.loc[site_rows["site"] == site, "impressions_7d"] = safe_int(recent_7d["impressions"].sum()) if not recent_7d.empty else safe_int(latest_row["impressions"])
+                site_rows.loc[site_rows["site"] == site, "impressions_prev_7d"] = safe_int(prev_7d["impressions"].sum()) if not prev_7d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "impressions_30d"] = safe_int(recent_30d["impressions"].sum()) if not recent_30d.empty else safe_int(latest_row["impressions"])
+                site_rows.loc[site_rows["site"] == site, "impressions_prev_30d"] = safe_int(prev_30d["impressions"].sum()) if not prev_30d.empty else 0
+                site_rows.loc[site_rows["site"] == site, "avg_pos_7d"] = safe_float(recent_7d["position"].mean()) if not recent_7d.empty else safe_float(latest_row["position"])
+                site_rows.loc[site_rows["site"] == site, "avg_pos_30d"] = safe_float(recent_30d["position"].mean()) if not recent_30d.empty else safe_float(latest_row["position"])
 
     if table_exists(conn, "uptime_status"):
         up = q(conn, """
@@ -302,7 +303,10 @@ if page == "📊 Overview":
 
     for col in ["keywords_7d", "keywords_prev_7d", "keywords_30d", "keywords_prev_30d", "clicks_7d", "clicks_prev_7d", "clicks_30d", "clicks_prev_30d", "suspicious_7d", "impressions_7d", "impressions_prev_7d", "impressions_30d", "impressions_prev_30d", "avg_pos_7d", "avg_pos_30d"]:
         if col in site_rows.columns:
-            site_rows[col] = pd.to_numeric(site_rows[col], errors="coerce").fillna(0)
+            if col.startswith("avg_pos"):
+                site_rows[col] = site_rows[col].apply(lambda val: safe_float(val))
+            else:
+                site_rows[col] = site_rows[col].apply(lambda val: safe_int(val))
     site_rows["category"] = "Uncategorized"
     site_rows["location"] = "Unknown"
     site_rows["is_up"] = pd.to_numeric(site_rows["is_up"], errors="coerce").fillna(1)
@@ -516,10 +520,10 @@ elif page == "📈 Rank Tracker":
             if not df_latest.empty:
                 st.subheader(f"Current Rankings — {selected_site}")
 
-                df_latest["position"] = pd.to_numeric(df_latest["position"], errors="coerce").round(0).astype("Int64")
+                df_latest["position"] = safe_int_series(df_latest["position"])
                 df_latest["ctr"] = pd.to_numeric(df_latest["ctr"], errors="coerce").fillna(0).round(2)
-                df_latest["clicks"] = pd.to_numeric(df_latest["clicks"], errors="coerce").fillna(0).astype(int)
-                df_latest["impressions"] = pd.to_numeric(df_latest["impressions"], errors="coerce").fillna(0).astype(int)
+                df_latest["clicks"] = safe_int_series(df_latest["clicks"])
+                df_latest["impressions"] = safe_int_series(df_latest["impressions"])
 
                 def style_position(val):
                     if pd.isna(val): return ""
@@ -564,7 +568,7 @@ elif page == "📈 Rank Tracker":
                 """, (selected_site,))
                 if not alerts.empty:
                     for col in ["old_pos", "new_pos", "change"]:
-                        alerts[col] = pd.to_numeric(alerts[col], errors="coerce").round(0).astype("Int64")
+                        alerts[col] = safe_int_series(alerts[col])
                     st.dataframe(alerts, use_container_width=True, hide_index=True)
                 else:
                     st.success("No significant rank changes recorded yet.")
@@ -726,7 +730,7 @@ elif page == "🟢 Uptime Monitor":
         status_df["site"] = status_df["site"].astype(str).str.replace("https://", "", regex=False).str.rstrip("/")
         status_df = pd.DataFrame({"site": known_sites}).merge(status_df, on="site", how="left")
         status_df["is_up"] = pd.to_numeric(status_df["is_up"], errors="coerce")
-        status_df["consecutive_fails"] = pd.to_numeric(status_df["consecutive_fails"], errors="coerce").fillna(0).astype(int)
+        status_df["consecutive_fails"] = safe_int_series(status_df["consecutive_fails"])
         status_df["Status"] = status_df["is_up"].apply(lambda x: "🟢 UP" if x == 1 else "🔴 DOWN" if x == 0 else "⚪ UNKNOWN")
         status_df["last_checked_display"] = status_df["last_checked"].apply(
             lambda x: "Not checked" if pd.isna(x) else pd.to_datetime(x).strftime("%d %b %I:%M %p")
@@ -788,7 +792,7 @@ elif page == "📊 Indexing Monitor":
             st.info("No indexing records found yet.")
         else:
             idx_df["site"] = idx_df["site"].str.replace("https://", "", regex=False).str.replace("sc-domain:", "", regex=False).str.rstrip("/")
-            idx_df["page_count"] = pd.to_numeric(idx_df["page_count"], errors="coerce").fillna(0).astype(int)
+            idx_df["page_count"] = safe_int_series(idx_df["page_count"])
 
             summary_rows = []
             for site in sorted(idx_df["site"].unique()):
