@@ -20,6 +20,8 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
+from config_paths import get_db_path, get_token_path
+
 # ── Load .env ────────────────────────────────────────────────────────────────
 try:
     from dotenv import load_dotenv
@@ -34,7 +36,7 @@ except ImportError:
                 os.environ.setdefault(k.strip(), v.strip())
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+DEFAULT_DB_PATH = get_db_path()
 
 CONFIG = {
     "email_to":       "info@atozadvert.com",
@@ -44,8 +46,8 @@ CONFIG = {
     "smtp_server":    os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
-    "token_file":     "token.pickle",
-    "db_path":        os.getenv("DB_PATH", DEFAULT_DB_PATH),
+    "token_file":     get_token_path(),
+    "db_path":        get_db_path(),
     "drop_alert_threshold": 5,      # alert if position drops by this many spots
     "opportunity_min_impressions": 50,  # min impressions to be an opportunity
     "opportunity_pos_min": 4,       # positions 4-20 are "quick win" opportunities

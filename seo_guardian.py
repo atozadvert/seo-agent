@@ -22,6 +22,8 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import base64
 
+from config_paths import get_db_path, get_token_path
+
 # Load .env file if present
 try:
     from dotenv import load_dotenv
@@ -39,7 +41,7 @@ except ImportError:
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  CONFIGURATION
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+DEFAULT_DB_PATH = get_db_path()
 
 CONFIG = {
     "email_to":       "info@atozadvert.com",
@@ -49,11 +51,11 @@ CONFIG = {
     "smtp_server":    os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
-    "token_file":     "token.pickle",
+    "token_file":     get_token_path(),
     "days_lookback":  7,        # 7 for first run; change to 1 for daily use
     "min_clicks_alert": 1,
     "drop_threshold": 30,
-    "db_path": os.getenv("DB_PATH", DEFAULT_DB_PATH),
+    "db_path": get_db_path(),
     "suspicious_min_impressions": 20,
 }
 
@@ -407,7 +409,7 @@ def build_email_html(reports, run_date):
     total_sus      = sum(r.get("total_suspicious", 0) for r in reports)
     traffic_alerts = sum(1 for r in reports if r.get("traffic_alert"))
     sites_clean    = sum(1 for r in reports if r.get("status") == "ok" and r.get("total_suspicious", 0) == 0)
-    overall_status = "ðŸš¨ Action Required" if total_sus > 0 or traffic_alerts else "âœ… All Clear"
+    overall_status = "Action Required" if total_sus > 0 or traffic_alerts else "All Clear"
     header_bg      = "#c0392b" if total_sus > 0 else "#27ae60"
 
     # â”€â”€ Top-level summary cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -423,10 +425,10 @@ def build_email_html(reports, run_date):
     summary_cards = f"""
     <table cellspacing="12" style="width:100%;margin:20px 0;">
       <tr>
-        {card("ðŸŒ","Sites Monitored", total_sites)}
-        {card("âœ…","Sites Clean", sites_clean, "#27ae60")}
-        {card("ðŸš¨","Suspicious Keywords", total_sus, "#c0392b" if total_sus else "#27ae60")}
-        {card("ðŸ“‰","Traffic Alerts", traffic_alerts, "#e67e22" if traffic_alerts else "#27ae60")}
+        {card("","Sites Monitored", total_sites)}
+        {card("","Sites Clean", sites_clean, "#27ae60")}
+        {card("","Suspicious Keywords", total_sus, "#c0392b" if total_sus else "#27ae60")}
+        {card("","Traffic Alerts", traffic_alerts, "#e67e22" if traffic_alerts else "#27ae60")}
       </tr>
     </table>"""
 
@@ -438,7 +440,7 @@ def build_email_html(reports, run_date):
             site_blocks += f"""
             <div style="border-left:4px solid #bdc3c7;padding:12px 18px;margin:12px 0;
                         background:#f9f9f9;border-radius:6px;">
-                <b>âšª {domain}</b> â€” No data available for this period.
+                <b>{domain}</b> — No data available for this period.
             </div>"""
             continue
 
@@ -446,7 +448,7 @@ def build_email_html(reports, run_date):
         total_sus_site = r.get("total_suspicious", 0)
         top_normal = r["normal"][:5]
         border    = "#c0392b" if total_sus_site > 0 or r["traffic_alert"] else "#27ae60"
-        site_icon = "ðŸš¨" if total_sus_site > 0 else ("âš ï¸" if r["traffic_alert"] else "âœ…")
+        site_icon = "Alert" if total_sus_site > 0 else ("Traffic Alert" if r["traffic_alert"] else "All Clear")
         bg_header = "#fdf0f0" if total_sus_site > 0 else "#f0fdf4"
 
         # stats row
@@ -481,7 +483,7 @@ def build_email_html(reports, run_date):
             traffic_banner = f"""
             <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;
                         padding:10px 14px;margin:8px 0;font-size:13px;">
-                âš ï¸ <b>Traffic Drop Alert:</b> Today's clicks are
+                <b>Traffic Drop Alert:</b> Today's clicks are
                 <b style="color:#e67e22;">{r['drop_pct']}% below</b> the 7-day average.
                 Investigate immediately.
             </div>"""
@@ -492,7 +494,7 @@ def build_email_html(reports, run_date):
             sus_section = f"""
             <div style="margin-top:12px;">
               <p style="font-size:13px;font-weight:700;color:#c0392b;margin:0 0 6px;">
-                ðŸš¨ Suspicious Keywords Detected ({total_sus_site} total)
+                Suspicious Keywords Detected ({total_sus_site} total)
               </p>"""
             for cat, items in sus.items():
                 top_items = items[:8]
@@ -531,7 +533,7 @@ def build_email_html(reports, run_date):
             legit_section = f"""
             <div style="margin-top:12px;">
               <p style="font-size:13px;font-weight:700;color:#27ae60;margin:0 0 6px;">
-                âœ… Top Legitimate Keywords
+                Top Legitimate Keywords
               </p>
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
                 <tr style="background:#f0fdf4;">
@@ -556,11 +558,11 @@ def build_email_html(reports, run_date):
                     background:{bg_header};padding:16px 18px;margin:16px 0;
                     box-shadow:0 2px 8px rgba(0,0,0,0.06);">
             <h3 style="margin:0 0 10px;font-size:16px;color:#2c3e50;">
-                {site_icon} &nbsp;{domain}
+                {site_icon} - {domain}
                 <a href="https://search.google.com/search-console?resource_id={r['site_url']}"
                    style="font-size:11px;color:#3498db;font-weight:normal;
                           margin-left:10px;text-decoration:none;">
-                   Open in GSC â†—
+                   Open in GSC
                 </a>
             </h3>
             {stats_row}
@@ -575,7 +577,7 @@ def build_email_html(reports, run_date):
         <div style='background:#fff8f0;border:1px solid #ffd0a0;border-radius:8px;
                                 padding:16px 18px;margin-top:20px;'>
             <h3 style='margin:0 0 10px;color:#e67e22;font-size:14px;'>
-                    ðŸ”§ Recommended Actions
+                    Recommended Actions
             </h3>
             <ol style='margin:0;padding-left:18px;font-size:13px;color:#444;line-height:1.8;'>
                 <li>Log in to your website hosting panel and run a <b>malware scan</b></li>
@@ -609,9 +611,8 @@ def build_email_html(reports, run_date):
 
   <!-- HEADER -->
   <div style="background:{header_bg};border-radius:12px 12px 0 0;padding:28px 30px;text-align:center;">
-    <div style="font-size:36px;margin-bottom:6px;">ðŸ›¡ï¸</div>
     <h1 style="margin:0;color:#fff;font-size:22px;letter-spacing:0.5px;">
-        SEO Guardian â€” Daily Report
+        SEO Guardian - Daily Report
     </h1>
     <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">
         {run_date} &nbsp;|&nbsp; Pakistan Standard Time &nbsp;|&nbsp; {overall_status}
@@ -661,8 +662,8 @@ def send_email(html, total_sus, traffic_alerts):
         print("   Or add them to a .env file and load with python-dotenv.")
         return False
 
-    icon    = "ðŸš¨ ALERT" if total_sus > 0 or traffic_alerts else "âœ… All Clear"
-    subject = f"{icon} â€” SEO Guardian Report ({datetime.now().strftime('%d %b %Y')})"
+    icon    = "ALERT" if total_sus > 0 or traffic_alerts else "ALL CLEAR"
+    subject = f"{icon} - SEO Guardian Report ({datetime.now().strftime('%d %b %Y')})"
 
     try:
         msg = MIMEMultipart('alternative')
@@ -689,6 +690,7 @@ def send_email(html, total_sus, traffic_alerts):
 def send_slack_summary(reports):
     webhook = CONFIG["slack_webhook"]
     if not webhook:
+        print("   ⚠️  Slack not configured; skipping ping.")
         return
     total_sus     = sum(r.get("total_suspicious", 0) for r in reports)
     traffic_alerts= sum(1 for r in reports if r.get("traffic_alert"))

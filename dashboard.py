@@ -15,6 +15,8 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
+from config_paths import get_db_path
+
 # ── Load .env ─────────────────────────────────────────────────────────────────
 try:
     from dotenv import load_dotenv
@@ -28,8 +30,7 @@ except ImportError:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
-DB_PATH = os.getenv("DB_PATH", DEFAULT_DB_PATH)
+DB_PATH = get_db_path()
 
 st.set_page_config(
     page_title="SEO Guardian Dashboard",

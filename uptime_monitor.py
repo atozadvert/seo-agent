@@ -20,6 +20,8 @@ from google.oauth2 import service_account
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+from config_paths import get_db_path, get_token_path
+
 # ── Load .env ─────────────────────────────────────────────────────────────────
 try:
     from dotenv import load_dotenv
@@ -34,7 +36,7 @@ except ImportError:
                 os.environ.setdefault(k.strip(), v.strip())
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEFAULT_DB_PATH = "/tmp/seo_guardian.db" if os.getenv("RAILWAY_ENVIRONMENT") else "seo_guardian.db"
+DEFAULT_DB_PATH = get_db_path()
 
 CONFIG = {
     "email_to":       "info@atozadvert.com",
@@ -44,8 +46,8 @@ CONFIG = {
     "smtp_server":    os.getenv("SMTP_SERVER", "smtp.gmail.com"),
     "smtp_port":      587,
     "slack_webhook":  os.getenv("SLACK_WEBHOOK_URL", ""),
-    "db_path":        os.getenv("DB_PATH", DEFAULT_DB_PATH),
-    "token_file":     "token.pickle",
+    "db_path":        get_db_path(),
+    "token_file":     get_token_path(),
     "timeout":        10,    # seconds before marking as down
     "slow_threshold": 3.0,   # seconds — warn if response takes longer
     "max_retries":    2,
